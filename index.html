@@ -1385,9 +1385,10 @@ const PROVIDERS={
     name:"OpenRouter",
     badge:"FREE",
     placeholder:"sk-or-...",
-    hint:'Get free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#6C63FF">openrouter.ai/keys</a> — free credits, DeepSeek R1 (best quality)',
-    model:"deepseek/deepseek-r1-0528:free",
+    hint:'Get free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#6C63FF">openrouter.ai/keys</a> — free credits, DeepSeek V4 Flash (best quality)',
+    model:"deepseek/deepseek-v4-flash:free",
     fallback:"deepseek/deepseek-r1:free",
+    fallback2:"openrouter/auto",
     validate:k=>k.startsWith("sk-or-")||k.length>20,
   },
   groq:{
@@ -1435,12 +1436,19 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
         body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:0.7})});
       return await res.json();
     };
-    let data=await tryOR(cfg.model);
-    if((data.error||!data.choices)&&cfg.fallback){
-      console.warn("OpenRouter primary failed, trying fallback:",cfg.fallback);
-      data=await tryOR(cfg.fallback);
+    // Try primary → fallback → fallback2 (auto-router)
+    for(const model of [cfg.model, cfg.fallback, cfg.fallback2].filter(Boolean)){
+      const data=await tryOR(model);
+      if(data.choices&&!data.error){return data;}
+      const errMsg=data.error?.message||"";
+      if(errMsg.includes("No endpoints found")||errMsg.includes("unavailable")){
+        console.warn(`OpenRouter model ${model} unavailable, trying next...`);
+        continue;
+      }
+      // Other error — surface it
+      throw new Error(errMsg||"OpenRouter error");
     }
-    return data;
+    throw new Error("All OpenRouter free models are currently unavailable. Try Groq instead.");
   }
   if(p==="groq"){
     const tryGroq=async(model)=>{
