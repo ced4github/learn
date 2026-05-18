@@ -490,7 +490,13 @@ function goLesson(id){
   if(!l)return;
   state.currentLesson=l;state.view="lesson";
   state.audioState={playing:false,pos:0,speed:1,segIdx:0};
-  renderTopbar(l.title,'<button class="btn btn-ghost btn-sm" onclick="goHome()">← Back</button>');
+  const backBtn=l.planBeltIdx!=null
+    ?`<button class="btn btn-ghost btn-sm" onclick="goPlan()">← Back to plan</button>`
+    :`<button class="btn btn-ghost btn-sm" onclick="goHome()">← Back</button>`;
+  const completeBtn=l.planBeltIdx!=null
+    ?`<button class="btn btn-sm" onclick="markLessonComplete('${l.id}')" style="background:${l.completed?"rgba(67,217,173,.15)":"rgba(67,217,173,.08)"};border:1px solid ${l.completed?"var(--accent3)":"rgba(67,217,173,.3)"};color:var(--accent3)">${l.completed?"✓ Completed":"Mark complete"}</button>`
+    :"";
+  renderTopbar(l.title,backBtn+completeBtn);
   renderLesson();
 }
 function renderTopicNav(){
@@ -555,13 +561,17 @@ function renderHome(){
 
 function lessonRow(l){
   const td=TOPICS_DEF.find(t=>t.id===l.topicId)||TOPICS_DEF[0];
-  return `<div id="lesson-row-${l.id}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;transition:all .15s;position:relative" onmouseenter="this.style.borderColor='var(--border2)';this.querySelector('.del-btn').style.opacity='1'" onmouseleave="this.style.borderColor='var(--border)';this.querySelector('.del-btn').style.opacity='0'">
+  const beltTag=l.planBeltIdx!=null&&state.planData?.belts?.[l.planBeltIdx]
+    ?`<span style="font-size:9px;font-family:var(--font-mono);padding:2px 6px;border-radius:4px;background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.2);color:var(--accent);flex-shrink:0">${state.planData.belts[l.planBeltIdx].belt}</span>`
+    :"";
+  const doneTag=l.completed?`<span style="font-size:9px;font-family:var(--font-mono);padding:2px 6px;border-radius:4px;background:rgba(67,217,173,.1);border:1px solid rgba(67,217,173,.25);color:var(--accent3);flex-shrink:0">✓</span>`:"";
+  return `<div id="lesson-row-${l.id}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid ${l.completed?"rgba(67,217,173,.2)":"var(--border)"};border-radius:10px;transition:all .15s;position:relative" onmouseenter="this.style.borderColor='var(--border2)';this.querySelector('.del-btn').style.opacity='1'" onmouseleave="this.style.borderColor='${l.completed?"rgba(67,217,173,.2)":"var(--border)"}';this.querySelector('.del-btn').style.opacity='0'">
     <div style="width:40px;height:40px;border-radius:8px;background:${td.color}18;border:1px solid ${td.color}33;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;cursor:pointer" onclick="goLesson('${l.id}')">${td.icon}</div>
     <div style="flex:1;min-width:0;cursor:pointer" onclick="goLesson('${l.id}')">
-      <div style="font-family:var(--font-display);font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.title}</div>
+      <div style="font-family:var(--font-display);font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${l.completed?"color:var(--text2)":""}">${l.title}</div>
       <div style="font-size:11px;color:var(--text2);margin-top:2px">${td.name} · ${l.level} · ${l.duration}</div>
     </div>
-    <div style="font-size:10px;color:var(--text3);font-family:var(--font-mono);flex-shrink:0;cursor:pointer" onclick="goLesson('${l.id}')">${l.segments?.length||0} segs</div>
+    <div style="display:flex;align-items:center;gap:5px">${beltTag}${doneTag}</div>
     <button class="del-btn" onclick="deleteLesson('${l.id}')" style="opacity:0;background:rgba(255,101,132,.1);border:1px solid rgba(255,101,132,.25);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;color:#FF6584;flex-shrink:0;transition:opacity .15s" title="Delete lesson">✕</button>
   </div>`;
 }
@@ -696,7 +706,12 @@ Return this exact JSON structure:
       topicId:topicId==="custom"?"custom":topicId,
       ...parsed,
       createdAt:new Date().toISOString(),
+      planBeltIdx:state.pendingBeltIdx!=null?state.pendingBeltIdx:undefined,
+      completed:false,
     };
+    // Clear pending belt context
+    state.pendingBeltIdx=null;
+    state.pendingBeltObjective=null;
     state.lessons.push(lesson);
     addXP(50);
     save();
@@ -1190,34 +1205,112 @@ Schema (fill ALL 6 belts — White/Yellow/Green/Blue/Brown/Black):
   }
 }
 
+function getBeltLessons(beltIdx){
+  // Lessons linked to a belt are tagged with planBeltIdx
+  return state.lessons.filter(l=>l.planBeltIdx===beltIdx);
+}
+function getBeltProgress(beltIdx){
+  const lessons=getBeltLessons(beltIdx);
+  const done=lessons.filter(l=>l.completed).length;
+  return {total:lessons.length,done};
+}
+function markLessonComplete(lessonId){
+  const l=state.lessons.find(x=>x.id===lessonId);
+  if(l){l.completed=!l.completed;save();renderPlanView();}
+}
+function generateLessonForBelt(beltIdx){
+  const p=state.planData;
+  if(!p)return;
+  const belt=p.belts[beltIdx];
+  // Store pending belt context so generate can pick it up
+  state.pendingBeltIdx=beltIdx;
+  state.pendingBeltObjective=belt.objective;
+  // Navigate to generate with pre-filled context
+  goGenerate();
+  // Pre-fill after render
+  setTimeout(()=>{
+    const topicInput=document.getElementById("g-subtopic");
+    if(topicInput)topicInput.value=belt.objective;
+    // Try to match topic
+    const planTitle=(p.title||"").toLowerCase();
+    const topicMatch=TOPICS_DEF.find(t=>planTitle.includes(t.name.toLowerCase().split(" ")[0].toLowerCase()));
+    if(topicMatch){
+      const sel=document.getElementById("g-topic");
+      if(sel)sel.value=topicMatch.id;
+    }
+    // Set level based on belt
+    const levelMap={White:"Beginner",Yellow:"Beginner",Green:"Intermediate",Blue:"Intermediate",Brown:"Advanced",Black:"Expert"};
+    const lvlSel=document.getElementById("g-level");
+    if(lvlSel)lvlSel.value=levelMap[belt.belt]||"Intermediate";
+    // Show banner
+    const form=document.getElementById("gen-form");
+    if(form){
+      const banner=document.createElement("div");
+      banner.style.cssText="background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--accent);margin-bottom:4px;display:flex;align-items:center;gap:8px";
+      banner.innerHTML=`<span style="font-size:14px">🎯</span><span>Generating for <strong>${belt.belt} Belt</strong> — ${belt.objective}</span>`;
+      form.insertBefore(banner,form.firstChild);
+    }
+  },80);
+}
+
 function renderPlanView(){
   const p=state.planData;
   const el=document.getElementById("content-area");
+
+  // Overall plan progress
+  const totalLessons=state.lessons.filter(l=>l.planBeltIdx!=null).length;
+  const doneLessons=state.lessons.filter(l=>l.planBeltIdx!=null&&l.completed).length;
+  const overallPct=totalLessons?Math.round(doneLessons/totalLessons*100):0;
+
   el.innerHTML=`
   <div class="fade-in">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px">
-      <div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:0">
         <div style="font-family:var(--font-display);font-size:18px;font-weight:800;margin-bottom:4px">${p.title}</div>
         <div style="font-size:12px;color:var(--text2);line-height:1.6;max-width:560px">${p.summary}</div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="state.planData=null;save();renderPlan()">↺ New plan</button>
-      <button class="btn btn-sm" onclick="deletePlan()" style="background:rgba(255,101,132,.1);border:1px solid rgba(255,101,132,.25);color:#FF6584">✕ Delete plan</button>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button class="btn btn-ghost btn-sm" onclick="state.planData=null;save();renderPlan()">↺ New plan</button>
+        <button class="btn btn-sm" onclick="deletePlan()" style="background:rgba(255,101,132,.1);border:1px solid rgba(255,101,132,.25);color:#FF6584">✕ Delete</button>
+      </div>
     </div>
-    <div style="margin-bottom:18px">${(p.belts||[]).map((b,i)=>`
-      <div class="belt-card" id="belt-card-${i}">
-        <div class="belt-header" onclick="toggleBelt(${i})">
-          <div class="belt-color" style="background:${b.color}"></div>
-          <div class="belt-name">${b.belt} Belt</div>
-          <div class="belt-status">${b.duration}</div>
-          <div style="color:var(--text3);margin-left:8px;font-size:12px" id="belt-arrow-${i}">›</div>
+
+    ${totalLessons>0?`
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px">
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:6px">
+          <span>Overall progress</span><span style="font-family:var(--font-mono);color:var(--accent)">${doneLessons}/${totalLessons} lessons · ${overallPct}%</span>
         </div>
+        <div style="height:6px;background:var(--surface);border-radius:3px">
+          <div style="height:100%;width:${overallPct}%;background:linear-gradient(90deg,var(--accent),var(--accent3));border-radius:3px;transition:width .5s"></div>
+        </div>
+      </div>
+    </div>`:""}
+
+    <div style="margin-bottom:18px">${(p.belts||[]).map((b,i)=>{
+      const prog=getBeltProgress(i);
+      const beltLessons=getBeltLessons(i);
+      const beltPct=prog.total?Math.round(prog.done/prog.total*100):0;
+      const isActive=state.xp>=(BELTS.find(bl=>bl.name.startsWith(b.belt))?.xp||0);
+      return `
+      <div class="belt-card" id="belt-card-${i}">
+        <div class="belt-header" onclick="toggleBelt(${i})" style="user-select:none">
+          <div class="belt-color" style="background:${b.color};width:14px;height:14px;flex-shrink:0"></div>
+          <div class="belt-name" style="flex:1">${b.belt} Belt</div>
+          ${prog.total>0?`<div style="font-size:10px;font-family:var(--font-mono);color:${prog.done===prog.total?"var(--accent3)":"var(--text3)"};margin-right:8px">${prog.done}/${prog.total} ✓</div>`:""}
+          <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);margin-right:8px">${b.duration}</div>
+          <div style="color:var(--text3);font-size:12px" id="belt-arrow-${i}">›</div>
+        </div>
+        ${prog.total>0?`<div style="height:2px;background:var(--surface2)"><div style="height:100%;width:${beltPct}%;background:${b.color};transition:width .4s"></div></div>`:""}
         <div class="belt-body" id="belt-body-${i}">
-          <div class="belt-obj">${b.objective}</div>
-          <div style="font-size:11px;font-family:var(--font-mono);color:var(--text3);letter-spacing:.1em;margin-bottom:8px;text-transform:uppercase">Resources</div>
+          <div class="belt-obj" style="margin-bottom:12px">${b.objective}</div>
+
+          <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);letter-spacing:.1em;margin-bottom:8px;text-transform:uppercase">Resources</div>
           ${(b.resources||[]).map(r=>`<div class="resource-item">
             <span class="resource-icon">${r.type==="video"?"▶":r.type==="book"?"📖":"📄"}</span>
             <div class="resource-text">${r.title}${r.author?" by "+r.author:""}<span class="resource-tag">${r.free?"Free":"Paid"}</span></div>
           </div>`).join("")}
+
           <div style="margin-top:12px;padding:10px;background:var(--surface2);border-radius:8px;border-left:2px solid ${b.color}">
             <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);letter-spacing:.1em;margin-bottom:4px">PROJECT</div>
             <div style="font-size:12px;color:var(--text2)">${b.project}</div>
@@ -1226,8 +1319,30 @@ function renderPlanView(){
             <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);letter-spacing:.1em;margin-bottom:4px">CHECKPOINT</div>
             <div style="font-size:12px;color:var(--text2)">${b.checkpoint}</div>
           </div>
+
+          <!-- LINKED LESSONS -->
+          <div style="margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="font-size:10px;font-family:var(--font-mono);color:var(--text3);letter-spacing:.1em;text-transform:uppercase">Lessons${prog.total>0?" ("+prog.done+"/"+prog.total+" done)":""}</div>
+              <button onclick="generateLessonForBelt(${i})" style="background:rgba(108,99,255,.12);border:1px solid rgba(108,99,255,.3);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:10px;color:var(--accent);font-family:var(--font-mono);letter-spacing:.06em">+ Generate lesson</button>
+            </div>
+            ${beltLessons.length===0
+              ?`<div style="font-size:12px;color:var(--text3);padding:10px;background:var(--surface2);border-radius:6px;text-align:center">No lessons yet — generate one for this belt</div>`
+              :`<div style="display:flex;flex-direction:column;gap:5px">${beltLessons.map(l=>`
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid ${l.completed?"var(--accent3)33":"var(--border)"};border-radius:7px;transition:all .15s">
+                  <div onclick="markLessonComplete('${l.id}')" style="width:16px;height:16px;border-radius:50%;border:1.5px solid ${l.completed?"var(--accent3)":"var(--border2)"};background:${l.completed?"var(--accent3)":"transparent"};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px">${l.completed?"✓":""}</div>
+                  <div style="flex:1;min-width:0;cursor:pointer" onclick="goLesson('${l.id}')">
+                    <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${l.completed?"color:var(--text3);text-decoration:line-through":""}">${l.title}</div>
+                    <div style="font-size:10px;color:var(--text3);margin-top:1px">${l.level} · ${l.duration}</div>
+                  </div>
+                  <button onclick="deleteLesson('${l.id}')" style="background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:2px 4px;opacity:.5" title="Remove">✕</button>
+                </div>`).join("")}
+              </div>`
+            }
+          </div>
         </div>
-      </div>`).join("")}
+      </div>`;
+    }).join("")}
     </div>
     ${p.tips&&p.tips.length?`<div class="card card-sm" style="border-color:rgba(108,99,255,.2)">
       <div style="font-family:var(--font-display);font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;letter-spacing:.06em">PRO TIPS</div>
