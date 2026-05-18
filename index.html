@@ -291,11 +291,40 @@ function save(){
   try{localStorage.setItem("lf_state",JSON.stringify({xp:state.xp,lessons:state.lessons,planData:state.planData}));}catch(e){}
 }
 function load(){
-  try{const d=localStorage.getItem("lf_state");if(d){const p=JSON.parse(d);state.xp=p.xp||0;state.lessons=p.lessons||[];state.planData=p.planData||null;}}catch(e){}
+  try{
+    const d=localStorage.getItem("lf_state");
+    if(d){
+      const p=JSON.parse(d);
+      state.xp=typeof p.xp==="number"?p.xp:0;
+      state.lessons=Array.isArray(p.lessons)?p.lessons:[];
+      state.planData=p.planData||null;
+      // Sanitise each lesson — ensure required fields exist
+      state.lessons=state.lessons.filter(l=>l&&typeof l==="object"&&l.id&&l.title);
+    }
+  }catch(e){
+    console.warn("Failed to load state, resetting:",e);
+    localStorage.removeItem("lf_state");
+  }
 }
 
 // ══════════════════════════════════════════
-//  NOTION SYNC
+//  INIT
+// ══════════════════════════════════════════
+try{load();}catch(e){localStorage.removeItem("lf_state");}
+try{updateXPBar();}catch(e){console.warn("updateXPBar failed:",e);}
+try{renderTopicNav();}catch(e){console.warn("renderTopicNav failed:",e);}
+try{renderHome();}catch(e){
+  console.error("renderHome failed:",e);
+  // Show error in content area so user sees something
+  const el=document.getElementById("content-area");
+  if(el)el.innerHTML=`<div style="padding:32px;color:#FF6584;font-family:monospace;font-size:13px">
+    <div style="font-size:16px;margin-bottom:12px">⚠ Dashboard failed to render</div>
+    <div style="color:#888;margin-bottom:16px">${e.message}</div>
+    <button onclick="localStorage.removeItem('lf_state');location.reload()" style="background:#6C63FF;border:none;color:#fff;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px">Clear data &amp; reload</button>
+  </div>`;
+}
+if(window.speechSynthesis)try{initVoices();}catch(e){}
+setTimeout(updateNotionBtn,100);
 // ══════════════════════════════════════════
 const NOTION={
   LESSONS_DB:"f501e7c3-3ff8-4228-956e-9076400f8a55",
@@ -881,7 +910,7 @@ function initVoices(cb){
     return true;
   };
   if(!load()){
-    window.speechSynthesis.onvoiceschanged=()=>{load();};
+    window.speechSynthesis.onvoiceschanged=()=>{pickBestVoice();};
     // Fallback poll — Chrome sometimes doesn't fire the event
     let tries=0;
     const poll=setInterval(()=>{if(load()||tries++>10)clearInterval(poll);},300);
@@ -1654,15 +1683,6 @@ async function deletePlan(){
   }
   renderPlan();
 }
-
-// ══════════════════════════════════════════
-// ══════════════════════════════════════════
-load();
-updateXPBar();
-renderTopicNav();
-renderHome();
-if(window.speechSynthesis)initVoices();
-setTimeout(updateNotionBtn,100);
 </script>
 </body>
 </html>
