@@ -701,6 +701,7 @@ Return this exact JSON structure:
     clearInterval(iv);
     const raw=extractText(data);
     const parsed=safeParseJSON(raw);
+    const lesson={
       topicId:topicId==="custom"?"custom":topicId,
       ...parsed,
       createdAt:new Date().toISOString(),
@@ -1357,22 +1358,6 @@ function toggleBelt(i){
   const open=body.classList.toggle("open");
   if(arrow)arrow.style.transform=open?"rotate(90deg)":"";
   state.planOpen[i]=open;
-}
-
-function populateVoicePicker(){
-  const sel=document.getElementById("voice-picker");if(!sel)return;
-  const voices=window.speechSynthesis.getVoices().filter(v=>v.lang.startsWith("en"));
-  sel.innerHTML=voices.map((v,i)=>`<option value="${i}" ${TTS.voice&&v.name===TTS.voice.name?"selected":""}>${v.name} (${v.lang})</option>`).join("");
-  const nd=document.getElementById("voice-name-display");
-  if(nd&&TTS.voice)nd.textContent="Using: "+TTS.voice.name;
-}
-function changeVoice(idx){
-  const voices=window.speechSynthesis.getVoices().filter(v=>v.lang.startsWith("en"));
-  TTS.voice=voices[parseInt(idx)]||TTS.voice;
-  const nd=document.getElementById("voice-name-display");
-  if(nd&&TTS.voice)nd.textContent="Using: "+TTS.voice.name;
-  // Restart if playing
-  if(TTS.speaking){pauseTTS();playTTS(TTS.chunkIdx);}
 }
 
 // ══════════════════════════════════════════
