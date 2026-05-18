@@ -684,7 +684,7 @@ You write educational podcast scripts that sound like the best episode of a prof
 - ENGAGING: Natural spoken delivery — transitions, rhetorical questions, pauses, analogies that make hard concepts click
 - NEVER GENERIC: Never say "for example, company X does Y" — say which actual company, which actual mechanism
 
-Output ONLY valid JSON. No markdown fences. No preamble. No explanation.`;
+Output ONLY valid JSON. No markdown fences. No backticks. No preamble. No explanation. No text before or after the JSON. Start your response with { and end with }.`;
 
   const userPrompt=`Generate a ${dur} expert-level educational podcast episode.
 
@@ -1159,7 +1159,7 @@ async function _doPlan(){
 Topic: ${topic}
 Level: ${level} | Time: ${hrs}/week | Goal: ${goal||"Master the topic"}
 
-Return ONLY a valid JSON object. No markdown. No backticks. No explanation. Just the JSON.
+Return ONLY a valid JSON object. No markdown. No backticks. No explanation. No text before or after. Start with { and end with }.
 
 Schema (fill ALL 6 belts — White/Yellow/Green/Blue/Brown/Black):
 {
@@ -1481,48 +1481,58 @@ function extractText(data){
     const err=data.error?.message||data.error?.error?.message||JSON.stringify(data.error||data);
     throw new Error(err);
   }
-  // Strip DeepSeek <think> reasoning block
-  text=text.replace(/<think>[\s\S]*?<\/think>/gi,"").trim();
-  // Strip markdown fences
-  text=text.replace(/^```json\s*/i,"").replace(/^```\s*/,"").replace(/```\s*$/,"").trim();
   return text;
 }
 
+function sanitiseJSON(text){
+  // Escape unescaped control characters inside JSON string values
+  return text.replace(
+    /"((?:[^"\\]|\\.)*)"/g,
+    (_,inner)=>'"'+inner
+      .replace(/\\/g,"\\\\")  // must come first
+      .replace(/\n/g,"\\n")
+      .replace(/\r/g,"\\r")
+      .replace(/\t/g,"\\t")
+      .replace(/[\x00-\x1F\x7F]/g,c=>"\\u"+c.charCodeAt(0).toString(16).padStart(4,"0"))
+      +'"'
+  );
+}
+function extractJSONBlock(text){
+  // Find outermost { ... } block
+  let depth=0,start=-1;
+  for(let i=0;i<text.length;i++){
+    if(text[i]==="{"){if(depth===0)start=i;depth++;}
+    else if(text[i]==="}"){depth--;if(depth===0&&start!==-1)return text.slice(start,i+1);}
+  }
+  return null;
+}
 function safeParseJSON(raw){
-  // Strategy 1 — direct parse (fastest, works most of the time)
-  try{ return JSON.parse(raw); }catch(e1){}
+  // Pre-clean: strip think tags and fences
+  let text=raw
+    .replace(/<think>[\s\S]*?<\/think>/gi,"")
+    .replace(/^```json\s*/i,"").replace(/^```\s*/,"").replace(/```\s*$/,"")
+    .trim();
 
-  // Strategy 2 — sanitise unescaped control characters inside JSON strings
-  // Replaces literal newlines/tabs/carriage returns inside string values only
-  try{
-    const sanitised=raw.replace(
-      /"((?:[^"\\]|\\.)*)"/g,
-      (_,inner)=>'"'+inner
-        .replace(/\n/g,"\\n")
-        .replace(/\r/g,"\\r")
-        .replace(/\t/g,"\\t")
-        .replace(/[\x00-\x1F\x7F]/g, c=>"\\u"+c.charCodeAt(0).toString(16).padStart(4,"0"))
-        +'"'
-    );
-    return JSON.parse(sanitised);
-  }catch(e2){}
+  // Strategy 1 — direct
+  try{return JSON.parse(text);}catch(e1){}
 
-  // Strategy 3 — extract first {...} block (handles leading/trailing garbage)
-  try{
-    const start=raw.indexOf("{");
-    const end=raw.lastIndexOf("}");
-    if(start!==-1&&end>start){
-      return JSON.parse(raw.slice(start,end+1));
-    }
-  }catch(e3){}
+  // Strategy 2 — sanitise control chars then parse
+  try{return JSON.parse(sanitiseJSON(text));}catch(e2){}
 
-  // Strategy 4 — aggressive: strip ALL control chars outside strings, retry
-  try{
-    const stripped=raw.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g,"");
-    return JSON.parse(stripped);
-  }catch(e4){}
+  // Strategy 3 — extract JSON block, then parse
+  const block=extractJSONBlock(text);
+  if(block){
+    try{return JSON.parse(block);}catch(e3){}
+    // Strategy 4 — extract + sanitise
+    try{return JSON.parse(sanitiseJSON(block));}catch(e4){}
+    // Strategy 5 — extract + strip all control chars
+    try{return JSON.parse(block.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g,""));}catch(e5){}
+  }
 
-  throw new Error("Could not parse AI response as JSON. The model may have returned malformed output — please try again.");
+  // Strategy 6 — strip ALL control chars from full text and retry
+  try{return JSON.parse(text.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g,""));}catch(e6){}
+
+  throw new Error("Could not parse AI response. Please try again — the model returned malformed output.");
 }
 
 function showKeyModal(onSuccess){
