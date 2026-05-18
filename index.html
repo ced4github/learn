@@ -689,8 +689,21 @@ async function _doGenerate(){
 
   const msgs=["Researching the topic...","Structuring the narrative...","Writing the segments...","Crafting the quiz...","Polishing the script...","Almost ready..."];
   let mi=0;
-  prog.innerHTML=`<div class="gen-progress"><div class="gen-spinner"></div><div class="gen-msgs" id="gen-msg-txt">${msgs[0]}</div><div style="font-size:11px;color:var(--text3);margin-top:4px">This takes ~10 seconds</div></div>`;
-  const iv=setInterval(()=>{mi++;const el=document.getElementById("gen-msg-txt");if(el)el.textContent=msgs[mi%msgs.length];},2500);
+  const genStart=Date.now();
+  prog.innerHTML=`<div class="gen-progress">
+    <div class="gen-spinner"></div>
+    <div class="gen-msgs" id="gen-msg-txt">${msgs[0]}</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px" id="gen-elapsed">0s elapsed</div>
+    <button onclick="cancelGeneration()" style="margin-top:16px;background:transparent;border:1px solid var(--border2);border-radius:6px;padding:6px 16px;color:var(--text2);cursor:pointer;font-size:11px;font-family:var(--font-mono)">Cancel</button>
+  </div>`;
+  const iv=setInterval(()=>{
+    mi++;
+    const el=document.getElementById("gen-msg-txt");
+    if(el)el.textContent=msgs[mi%msgs.length];
+    const es=document.getElementById("gen-elapsed");
+    const secs=Math.round((Date.now()-genStart)/1000);
+    if(es)es.textContent=secs+"s elapsed"+(secs>20?" — model is thinking hard...":secs>40?" — almost done...":"");
+  },2500);
 
   const TOPIC_PERSONAS={
     ai:`You are a former Google Brain researcher and AI engineer with 15 years building production ML systems. You've shipped LLMs, RAG pipelines, and agentic systems at scale. You explain AI with precise technical accuracy, real architectural trade-offs, and hard-won practical insight — not surface-level definitions.`,
@@ -1181,7 +1194,18 @@ async function _doPlan(){
   document.getElementById("plan-form").style.display="none";
   const prog=document.getElementById("plan-progress");
   prog.style.display="block";
-  prog.innerHTML=`<div class="gen-progress"><div class="gen-spinner"></div><div class="gen-msgs">Building your personalized learning plan...</div></div>`;
+  const planStart=Date.now();
+  prog.innerHTML=`<div class="gen-progress">
+    <div class="gen-spinner"></div>
+    <div class="gen-msgs">Building your personalized learning plan...</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px" id="plan-elapsed">0s elapsed</div>
+    <button onclick="cancelGeneration()" style="margin-top:16px;background:transparent;border:1px solid var(--border2);border-radius:6px;padding:6px 16px;color:var(--text2);cursor:pointer;font-size:11px;font-family:var(--font-mono)">Cancel</button>
+  </div>`;
+  const planTick=setInterval(()=>{
+    const es=document.getElementById("plan-elapsed");
+    const secs=Math.round((Date.now()-planStart)/1000);
+    if(es)es.textContent=secs+"s elapsed"+(secs>20?" — structuring belts...":secs>40?" — almost done...":"");
+  },1000);
 
   const BELT_COLORS={"White":"#E8E8E8","Yellow":"#FFD700","Green":"#43D9AD","Blue":"#6C63FF","Brown":"#C0764A","Black":"#333333"};
   const prompt=`You are an expert learning coach. Create a 6-belt structured learning plan. Be concise — keep each field short.
@@ -1216,6 +1240,7 @@ Schema (fill ALL 6 belts — White/Yellow/Green/Blue/Brown/Black):
 
   try{
     const data=await callLLM(planSystem, prompt, 6000);
+    clearInterval(planTick);
     if(data.error){throw new Error(data.error.message||"API error");}
     const raw=extractText(data);
     const parsed=safeParseJSON(raw);
@@ -1225,6 +1250,7 @@ Schema (fill ALL 6 belts — White/Yellow/Green/Blue/Brown/Black):
     notionPushPlan(parsed).then(()=>{if(getNotionKey())showSyncToast("Plan synced to Notion");}).catch(()=>{});
     renderPlanView();
   }catch(e){
+    clearInterval(planTick);
     prog.innerHTML=`<div class="card" style="border-color:rgba(255,101,132,.3);background:rgba(255,101,132,.05)">
       <div style="color:var(--accent2);font-size:13px;margin-bottom:8px">⚠ ${e.message}</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Check browser console for details.</div>
@@ -1435,6 +1461,26 @@ function buildMessages(systemPrompt, userPrompt){
   ];
 }
 
+let _genAbort=null;
+function cancelGeneration(){
+  if(_genAbort)_genAbort.abort();
+  goGenerate(); // reset to form
+}
+
+async function fetchWithTimeout(url, options, ms=45000){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),ms);
+  try{
+    const res=await fetch(url,{...options,signal:ctrl.signal});
+    clearTimeout(timer);
+    return res;
+  }catch(e){
+    clearTimeout(timer);
+    if(e.name==="AbortError")throw new Error("Request timed out after "+Math.round(ms/1000)+"s. The model may be overloaded — try again or switch provider (🔑).");
+    throw e;
+  }
+}
+
 async function callLLM(systemPrompt, userPrompt, maxTokens){
   const p=getProvider();
   const key=getApiKey();
@@ -1443,12 +1489,11 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
 
   if(p==="openrouter"){
     const tryOR=async(model)=>{
-      const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",
+      const res=await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions",{method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+key,"HTTP-Referer":"https://learnfast.app","X-Title":"LearnFast"},
-        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:0.7})});
+        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:0.7})},50000);
       return await res.json();
     };
-    // Try primary → fallback → fallback2 (auto-router)
     for(const model of [cfg.model, cfg.fallback, cfg.fallback2].filter(Boolean)){
       const data=await tryOR(model);
       if(data.choices&&!data.error){return data;}
@@ -1457,16 +1502,15 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
         console.warn(`OpenRouter model ${model} unavailable, trying next...`);
         continue;
       }
-      // Other error — surface it
       throw new Error(errMsg||"OpenRouter error");
     }
-    throw new Error("All OpenRouter free models are currently unavailable. Try Groq instead.");
+    throw new Error("All OpenRouter free models unavailable. Switch to Groq (click 🔑).");
   }
   if(p==="groq"){
     const tryGroq=async(model)=>{
-      const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",
+      const res=await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions",{method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},
-        body:JSON.stringify({model,messages,max_tokens:Math.min(maxTokens,8000),temperature:0.6})});
+        body:JSON.stringify({model,messages,max_tokens:Math.min(maxTokens,8000),temperature:0.6})},45000);
       return await res.json();
     };
     let data=await tryGroq(cfg.model);
@@ -1476,10 +1520,10 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
     }
     return data;
   }
-  // anthropic — system is a top-level param
-  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",
+  // anthropic
+  const res=await fetchWithTimeout("https://api.anthropic.com/v1/messages",{method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})});
+    body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})},60000);
   return await res.json();
 }
 
