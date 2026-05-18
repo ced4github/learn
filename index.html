@@ -653,22 +653,44 @@ async function _doGenerate(){
   prog.innerHTML=`<div class="gen-progress"><div class="gen-spinner"></div><div class="gen-msgs" id="gen-msg-txt">${msgs[0]}</div><div style="font-size:11px;color:var(--text3);margin-top:4px">This takes ~10 seconds</div></div>`;
   const iv=setInterval(()=>{mi++;const el=document.getElementById("gen-msg-txt");if(el)el.textContent=msgs[mi%msgs.length];},2500);
 
-  const hg=format==="Host + Guest";
-  const quizInstr=doQuiz?`,"quiz":[{"q":"Question text?","opts":["A","B","C","D"],"answer":0,"explain":"Why A is correct"},{"q":"...","opts":["A","B","C","D"],"answer":1,"explain":"..."},{"q":"...","opts":["A","B","C","D"],"answer":2,"explain":"..."},{"q":"...","opts":["A","B","C","D"],"answer":0,"explain":"..."},{"q":"...","opts":["A","B","C","D"],"answer":3,"explain":"..."}]`:"";
-  const prompt=`You are an expert podcast producer and learning coach. Generate a ${dur} educational podcast episode.
+  const TOPIC_PERSONAS={
+    ai:`You are a former Google Brain researcher and AI engineer with 15 years building production ML systems. You've shipped LLMs, RAG pipelines, and agentic systems at scale. You explain AI with precise technical accuracy, real architectural trade-offs, and hard-won practical insight — not surface-level definitions.`,
+    defi:`You are a DeFi protocol architect and on-chain analyst who has audited $500M+ in smart contracts and built liquidity strategies across Ethereum, Solana and L2s. You understand MEV, tokenomics, protocol risk, and yield mechanics at a deep technical and financial level.`,
+    devsecops:`You are a CISO-level security architect with 20 years in adversarial security, threat modelling, and DevSecOps at Tier-1 financial institutions. You've built and broken CI/CD pipelines, conducted red team exercises, and implemented SAST/DAST at enterprise scale.`,
+    macro:`You are a macro strategist who spent 15 years at a global macro hedge fund, trading FX, rates, and equities across economic cycles. You think in terms of monetary transmission mechanisms, cross-asset correlations, and positioning — not just news headlines.`,
+    blockchain:`You are a blockchain security researcher who has found critical vulnerabilities in major protocols, written ZK circuit audits, and built formal verification frameworks. You understand cryptographic primitives, consensus mechanisms, and attack vectors at the protocol level.`,
+    wealth:`You are a Managing Director-level wealth technology advisor at a global private bank, with deep expertise in RWA tokenization, regulatory frameworks (MAS, SEC, FCA), and the architecture of wealth management platforms used by UHNW clients.`,
+    custom:`You are a world-class domain expert, practitioner, and educator in the requested field. You have 20+ years of hands-on experience. You teach like the best professor at MIT combined with a veteran practitioner from the top firm in the industry.`,
+  };
 
-Topic: ${topicLabel}${subtopic?" — Focus: "+subtopic:""}
-Level: ${level} | Format: ${format}
+  const persona=TOPIC_PERSONAS[topicId]||TOPIC_PERSONAS.custom;
 
-Return ONLY valid JSON (no markdown, no backticks):
-{"title":"Compelling episode title","tagline":"One sentence hook","topic":"${topicLabel}","level":"${level}","duration":"${dur}","format":"${format}","keywords":["k1","k2","k3","k4","k5"],"showNotes":"2-paragraph show notes","segments":[{"type":"intro","label":"Cold Open","speaker":"Host","duration":"~1 min","script":"Write 200+ words of natural spoken audio script. Sound like a real podcast host. Be engaging, clear, educational."},{"type":"main","label":"Core Concept","speaker":"${hg?"Host":"Host"}","duration":"~3 min","script":"300+ words..."},{"type":"example","label":"Real-World Example","speaker":"Host","duration":"~2 min","script":"200+ words with a concrete, specific real-world example..."},{"type":"deep","label":"Deep Dive","speaker":"${hg?"Guest":"Host"}","duration":"~3 min","script":"300+ words going deeper into technical details, nuances..."},{"type":"summary","label":"Key Takeaways","speaker":"Host","duration":"~1 min","script":"150+ words summarizing the 3-4 main points..."},{"type":"cta","label":"Next Steps","speaker":"Host","duration":"~30 sec","script":"80+ words with concrete next steps the listener can take today..."}]${quizInstr}}`;
+  const systemPrompt=`${persona}
+
+You write educational podcast scripts that sound like the best episode of a professional podcast — Lex Fridman meets Masters in Business meets a world-class university lecture. Your content is:
+- EXPERT-LEVEL: Use precise terminology, real mechanisms, actual numbers and data points where relevant
+- SPECIFIC: Name real companies, protocols, events, people, papers, tools — not generic examples
+- NUANCED: Address trade-offs, failure modes, edge cases, and what most people get wrong
+- ENGAGING: Natural spoken delivery — transitions, rhetorical questions, pauses, analogies that make hard concepts click
+- NEVER GENERIC: Never say "for example, company X does Y" — say which actual company, which actual mechanism
+
+Output ONLY valid JSON. No markdown fences. No preamble. No explanation.`;
+
+  const userPrompt=`Generate a ${dur} expert-level educational podcast episode.
+
+Topic: ${topicLabel}${subtopic?" — Specific focus: "+subtopic:""}
+Audience level: ${level}
+Format: ${format}
+${format==="Host + Guest"?"The guest is a practitioner with deep firsthand experience. The host challenges assumptions and asks hard follow-up questions.":""}
+
+Return this exact JSON structure:
+{"title":"Specific compelling title (not generic)","tagline":"One precise hook sentence","topic":"${topicLabel}","level":"${level}","duration":"${dur}","format":"${format}","keywords":["specific-term-1","specific-term-2","specific-term-3","specific-term-4","specific-term-5"],"showNotes":"2 paragraphs: what listeners will learn + 3 specific resources with URLs","segments":[{"type":"intro","label":"Cold Open","speaker":"Host","duration":"~1 min","script":"MINIMUM 250 WORDS. Open with a provocative statement, surprising fact, or counter-intuitive insight that immediately signals expert-level content. No generic introductions. Reference a real recent event, paper, or development."},{"type":"main","label":"Core Mechanism","speaker":"Host","duration":"~3 min","script":"MINIMUM 400 WORDS. Explain the core concept at an expert level. Use the correct technical terminology. Explain HOW it works mechanically, not just WHAT it is. Include real numbers, real systems, real trade-offs."},{"type":"example","label":"Real-World Case Study","speaker":"Host","duration":"~2 min","script":"MINIMUM 300 WORDS. A specific, named real-world case — name the company, protocol, event, date, and outcome. Walk through what actually happened and what it reveals about the underlying mechanisms."},{"type":"deep","label":"Expert Deep Dive","speaker":"${hg?"Guest — a domain practitioner":"Host"}","duration":"~3 min","script":"MINIMUM 400 WORDS. Go deeper than any introductory resource. Address what most people get wrong, the failure modes, the edge cases, the nuances that only practitioners know. Reference specific papers, tools, or frameworks."},{"type":"summary","label":"Synthesis & Implications","speaker":"Host","duration":"~1 min","script":"MINIMUM 200 WORDS. Do NOT just list what was covered. Synthesize: what does this mean for the listener's domain? What should they change about how they think or act? What is the one mental model to take away?"},{"type":"cta","label":"Next Steps","speaker":"Host","duration":"~30 sec","script":"MINIMUM 100 WORDS. Specific, actionable next steps — name the exact resource, paper, tool, or practice. Not generic advice."}]${quizInstr}}`;
 
   try{
-    const data=await callLLM(prompt,5000);
+    const data=await callLLM(systemPrompt, userPrompt, 6000);
     clearInterval(iv);
     const raw=extractText(data);
-    const clean=raw.replace(/```json|```/g,"").trim();
-    const parsed=JSON.parse(clean);
+    const parsed=JSON.parse(raw);
     const lesson={
       id:Date.now().toString(),
       topicId:topicId==="custom"?"custom":topicId,
@@ -1147,13 +1169,13 @@ Schema (fill ALL 6 belts — White/Yellow/Green/Blue/Brown/Black):
   "tips": ["tip 1", "tip 2", "tip 3"]
 }`;
 
+  const planSystem=`You are a world-class learning designer and domain expert. You create structured, opinionated learning plans that take people from zero to expert faster than any university curriculum. Your plans reference real, specific resources — named books, named courses, named tools — not generic suggestions. You are direct, practical, and hold nothing back.`;
+
   try{
-    const data=await callLLM(prompt,6000);
+    const data=await callLLM(planSystem, prompt, 6000);
     if(data.error){throw new Error(data.error.message||"API error");}
     const raw=extractText(data);
-    const clean=raw.replace(/```json|```/g,"").trim();
-    // Inject belt colors
-    const parsed=JSON.parse(clean);
+    const parsed=JSON.parse(raw);
     (parsed.belts||[]).forEach(b=>{b.color=BELT_COLORS[b.belt]||"#888";});
     state.planData=parsed;
     addXP(30);save();
@@ -1244,28 +1266,29 @@ function changeVoice(idx){
 //  MULTI-PROVIDER LLM ENGINE
 // ══════════════════════════════════════════
 const PROVIDERS={
-  gemini:{
-    name:"Google Gemini",
+  openrouter:{
+    name:"OpenRouter",
     badge:"FREE",
-    placeholder:"AIza...",
-    hint:'Get free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#6C63FF">aistudio.google.com</a> — no credit card',
-    model:"gemini-2.0-flash",
-    validate:k=>k.startsWith("AIza"),
+    placeholder:"sk-or-...",
+    hint:'Get free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#6C63FF">openrouter.ai/keys</a> — free credits, DeepSeek R1 (best quality)',
+    model:"deepseek/deepseek-r1-0528:free",
+    fallback:"deepseek/deepseek-r1:free",
+    validate:k=>k.startsWith("sk-or-")||k.length>20,
   },
   groq:{
-    name:"Groq (Llama 3)",
+    name:"Groq",
     badge:"FREE",
     placeholder:"gsk_...",
-    hint:'Get free key at <a href="https://console.groq.com/keys" target="_blank" style="color:#6C63FF">console.groq.com</a> — no credit card, works globally',
-    model:"llama-3.3-70b-versatile",
-    fallback:"llama3-70b-8192",
+    hint:'Get free key at <a href="https://console.groq.com/keys" target="_blank" style="color:#6C63FF">console.groq.com</a> — fastest inference, works globally',
+    model:"deepseek-r1-distill-llama-70b",
+    fallback:"llama-3.3-70b-versatile",
     validate:k=>k.startsWith("gsk_"),
   },
   anthropic:{
-    name:"Anthropic Claude",
+    name:"Claude Sonnet",
     badge:"PAID",
     placeholder:"sk-ant-...",
-    hint:'Get key at <a href="https://console.anthropic.com" target="_blank" style="color:#6C63FF">console.anthropic.com</a>',
+    hint:'Get key at <a href="https://console.anthropic.com" target="_blank" style="color:#6C63FF">console.anthropic.com</a> — highest quality',
     model:"claude-sonnet-4-20250514",
     validate:k=>k.startsWith("sk-"),
   },
@@ -1276,18 +1299,31 @@ function getApiKey(){return localStorage.getItem("lf_apikey_"+getProvider())||""
 function saveProvider(p){localStorage.setItem("lf_provider",p);}
 function saveApiKey(p,k){localStorage.setItem("lf_apikey_"+p,k.trim());}
 
-async function callLLM(prompt,maxTokens){
+// Build system + user messages for each provider
+function buildMessages(systemPrompt, userPrompt){
+  return [
+    {role:"system", content:systemPrompt},
+    {role:"user",   content:userPrompt},
+  ];
+}
+
+async function callLLM(systemPrompt, userPrompt, maxTokens){
   const p=getProvider();
   const key=getApiKey();
   const cfg=PROVIDERS[p];
+  const messages=buildMessages(systemPrompt, userPrompt);
 
-  if(p==="gemini"){
-    const url=`https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${key}`;
-    const res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:maxTokens,temperature:0.7}})});
-    const data=await res.json();
-    if(data.error?.message?.includes("limit: 0")||data.error?.message?.includes("free_tier")){
-      throw new Error("Gemini free tier unavailable in your region. Click 🔑 and switch to Groq — it's free and works globally.");
+  if(p==="openrouter"){
+    const tryOR=async(model)=>{
+      const res=await fetch("https://openrouter.ai/api/v1/chat/completions",{method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+key,"HTTP-Referer":"https://learnfast.app","X-Title":"LearnFast"},
+        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:0.7})});
+      return await res.json();
+    };
+    let data=await tryOR(cfg.model);
+    if((data.error||!data.choices)&&cfg.fallback){
+      console.warn("OpenRouter primary failed, trying fallback:",cfg.fallback);
+      data=await tryOR(cfg.fallback);
     }
     return data;
   }
@@ -1295,7 +1331,7 @@ async function callLLM(prompt,maxTokens){
     const tryGroq=async(model)=>{
       const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},
-        body:JSON.stringify({model,messages:[{role:"user",content:prompt}],max_tokens:Math.min(maxTokens,8000),temperature:0.7})});
+        body:JSON.stringify({model,messages,max_tokens:Math.min(maxTokens,8000),temperature:0.6})});
       return await res.json();
     };
     let data=await tryGroq(cfg.model);
@@ -1305,28 +1341,36 @@ async function callLLM(prompt,maxTokens){
     }
     return data;
   }
-  // anthropic
+  // anthropic — system is a top-level param
   const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,messages:[{role:"user",content:prompt}]})});
+    body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})});
   return await res.json();
 }
 
 function extractText(data){
+  let text="";
   // Gemini
   if(data.candidates){
-    return data.candidates?.[0]?.content?.parts?.[0]?.text||"";
+    text=data.candidates?.[0]?.content?.parts?.[0]?.text||"";
   }
-  // OpenAI-compatible (Groq)
-  if(data.choices){
-    return data.choices?.[0]?.message?.content||"";
+  // OpenAI-compatible (Groq, OpenRouter)
+  else if(data.choices){
+    text=data.choices?.[0]?.message?.content||"";
   }
   // Anthropic
-  if(data.content){
-    return data.content.map(b=>b.text||"").join("");
+  else if(data.content){
+    text=data.content.map(b=>b.text||"").join("");
   }
-  const err=data.error?.message||data.error?.error?.message||JSON.stringify(data.error||data);
-  throw new Error(err);
+  else{
+    const err=data.error?.message||data.error?.error?.message||JSON.stringify(data.error||data);
+    throw new Error(err);
+  }
+  // Strip DeepSeek R1 <think>...</think> reasoning block before JSON
+  text=text.replace(/<think>[\s\S]*?<\/think>/gi,"").trim();
+  // Strip any remaining markdown fences
+  text=text.replace(/```json|```/g,"").trim();
+  return text;
 }
 
 function showKeyModal(onSuccess){
