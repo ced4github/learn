@@ -614,7 +614,7 @@ function renderGenerate(){
   <div class="fade-in gen-panel">
     <div class="card" style="margin-bottom:16px">
       <div style="font-family:var(--font-display);font-size:16px;font-weight:700;margin-bottom:4px">New Learning Episode</div>
-      <div style="font-size:12px;color:var(--text2)">Claude generates a full podcast-style lesson script + quiz</div>
+      <div style="font-size:12px;color:var(--text2)" id="gen-provider-label">AI generates a full podcast-style lesson script + quiz</div>
     </div>
     <div class="card gen-form" id="gen-form">
       <div class="form-group">
@@ -667,6 +667,13 @@ function renderGenerate(){
   document.getElementById("g-topic").addEventListener("change",e=>{
     document.getElementById("g-custom-wrap").style.display=e.target.value==="custom"?"flex":"none";
   });
+  updateGenProviderLabel();
+}
+function updateGenProviderLabel(){
+  const el=document.getElementById("gen-provider-label");
+  if(!el)return;
+  const cfg=PROVIDERS[getProvider()];
+  if(cfg)el.innerHTML=`<span style="color:var(--accent);font-family:var(--font-mono);font-size:11px">${cfg.name}</span> generates a full podcast-style lesson script + quiz`;
 }
 
 async function startGenerate(){
@@ -690,11 +697,12 @@ async function _doGenerate(){
   const msgs=["Researching the topic...","Structuring the narrative...","Writing the segments...","Crafting the quiz...","Polishing the script...","Almost ready..."];
   let mi=0;
   const genStart=Date.now();
+  const providerName=PROVIDERS[getProvider()]?.name||"AI";
   prog.innerHTML=`<div class="gen-progress">
     <div class="gen-spinner"></div>
     <div class="gen-msgs" id="gen-msg-txt">${msgs[0]}</div>
-    <div style="font-size:11px;color:var(--text3);margin-top:4px" id="gen-elapsed">0s elapsed</div>
-    <button onclick="cancelGeneration()" style="margin-top:16px;background:transparent;border:1px solid var(--border2);border-radius:6px;padding:6px 16px;color:var(--text2);cursor:pointer;font-size:11px;font-family:var(--font-mono)">Cancel</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px" id="gen-elapsed">0s · using ${providerName}</div>
+    <button onclick="cancelGeneration()" style="margin-top:16px;background:transparent;border:1px solid var(--border2);border-radius:6px;padding:6px 16px;color:var(--text2);cursor:pointer;font-size:11px;font-family:var(--font-mono)">✕ Cancel</button>
   </div>`;
   const iv=setInterval(()=>{
     mi++;
@@ -702,7 +710,7 @@ async function _doGenerate(){
     if(el)el.textContent=msgs[mi%msgs.length];
     const es=document.getElementById("gen-elapsed");
     const secs=Math.round((Date.now()-genStart)/1000);
-    if(es)es.textContent=secs+"s elapsed"+(secs>20?" — model is thinking hard...":secs>40?" — almost done...":"");
+    if(es)es.textContent=secs+"s · "+providerName+(secs>20?" — thinking hard...":secs>35?" — almost done...":"");
   },2500);
 
   const TOPIC_PERSONAS={
@@ -1461,22 +1469,28 @@ function buildMessages(systemPrompt, userPrompt){
   ];
 }
 
-let _genAbort=null;
+let _genCtrl=null; // global AbortController for current generation
+
 function cancelGeneration(){
-  if(_genAbort)_genAbort.abort();
-  goGenerate(); // reset to form
+  if(_genCtrl){_genCtrl.abort();_genCtrl=null;}
+  goGenerate();
 }
 
 async function fetchWithTimeout(url, options, ms=45000){
+  // Create a new controller for this request and chain it to the global one
   const ctrl=new AbortController();
-  const timer=setTimeout(()=>ctrl.abort(),ms);
+  _genCtrl=ctrl; // expose so cancelGeneration() can abort it
+  const timer=setTimeout(()=>{
+    ctrl.abort();
+    _genCtrl=null;
+  },ms);
   try{
     const res=await fetch(url,{...options,signal:ctrl.signal});
     clearTimeout(timer);
     return res;
   }catch(e){
     clearTimeout(timer);
-    if(e.name==="AbortError")throw new Error("Request timed out after "+Math.round(ms/1000)+"s. The model may be overloaded — try again or switch provider (🔑).");
+    if(e.name==="AbortError")throw new Error("Timed out after "+Math.round(ms/1000)+"s — model overloaded. Try again or switch provider (🔑).");
     throw e;
   }
 }
@@ -1640,6 +1654,7 @@ function selectProvider(id){
   inp.placeholder=cfg.placeholder;
   inp.value=localStorage.getItem("lf_apikey_"+id)||"";
   document.getElementById("key-error").style.display="none";
+  updateGenProviderLabel();
 }
 function submitKey(){
   const val=document.getElementById("key-input").value.trim();
