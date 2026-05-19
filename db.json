@@ -1,0 +1,172 @@
+{
+  "lessons": [],
+  "xp": 380,
+  "planData": {
+    "title": "LLM & RAG Optimization for Local Algo Trading",
+    "summary": "A structured plan to optimize a local algo trading system using ChromaDB and Ollama with qwen2.5:7b, progressing from basic RAG setup to production-level latency and reliability.",
+    "belts": [
+      {
+        "belt": "White",
+        "duration": "1-2 weeks",
+        "objective": "Run a basic RAG pipeline locally with Ollama and ChromaDB, querying trading documents.",
+        "resources": [
+          {
+            "type": "video",
+            "title": "Ollama Setup Guide",
+            "free": true
+          },
+          {
+            "type": "article",
+            "title": "Introduction to Retrieval Augmented Generation",
+            "free": true
+          },
+          {
+            "type": "book",
+            "title": "Building LLM Apps",
+            "author": "Valentina Alto",
+            "free": false
+          }
+        ],
+        "project": "Set up Ollama with qwen2.5:7b, create a ChromaDB collection of 10 trading documents, and run a query with context from the top-3 documents.",
+        "checkpoint": "You can successfully query the local LLM and receive answers that include relevant info from your documents.",
+        "color": "#E8E8E8"
+      },
+      {
+        "belt": "Yellow",
+        "duration": "2-3 weeks",
+        "objective": "Optimize chunking and embedding strategies to improve retrieval precision for trading data.",
+        "resources": [
+          {
+            "type": "video",
+            "title": "Chunking Strategies for RAG",
+            "free": true
+          },
+          {
+            "type": "article",
+            "title": "Best Embedding Models for Code and Finance",
+            "free": true
+          },
+          {
+            "type": "book",
+            "title": "LLM Engineer's Handbook",
+            "author": "Paul Iusztin",
+            "free": false
+          }
+        ],
+        "project": "Experiment with chunk sizes 128, 256, 512 tokens and two embedding models (e.g., all-MiniLM-L6-v2 vs. bge-base-en-v1.5) on a set of 50 trading reports, measuring recall@5.",
+        "checkpoint": "You can choose the best chunk size and embedding model for your domain based on recall metrics.",
+        "color": "#FFD700"
+      },
+      {
+        "belt": "Green",
+        "duration": "2-3 weeks",
+        "objective": "Implement hybrid search (dense + sparse) and metadata filtering for time-aware retrieval.",
+        "resources": [
+          {
+            "type": "video",
+            "title": "Hybrid Search with ChromaDB",
+            "free": true
+          },
+          {
+            "type": "article",
+            "title": "Metadata Filtering in Vector Databases",
+            "free": true
+          },
+          {
+            "type": "book",
+            "title": "Advanced RAG",
+            "author": "Jay Alammar",
+            "free": false
+          }
+        ],
+        "project": "Add BM25 sparse retrieval to ChromaDB (via separate index or external library) and filter by date field (e.g., only docs from last 30 days). Benchmark latency and accuracy.",
+        "checkpoint": "Your system returns relevant trading context in under 1 second and the top results respect date filters.",
+        "color": "#43D9AD"
+      },
+      {
+        "belt": "Blue",
+        "duration": "3-4 weeks",
+        "objective": "Apply cross-encoder reranking and query transformation to boost answer quality.",
+        "resources": [
+          {
+            "type": "video",
+            "title": "Reranking for RAG",
+            "free": true
+          },
+          {
+            "type": "article",
+            "title": "Query Transformation in RAG",
+            "free": true
+          },
+          {
+            "type": "book",
+            "title": "Reinforcement Learning for LLMs",
+            "author": "None",
+            "free": false
+          }
+        ],
+        "project": "Integrate a cross-encoder reranker (e.g., BAAI/bge-reranker-v2-m3) after retrieval and try query expansion (e.g., generate 2 paraphrase queries). Evaluate on a test set of 20 trading questions.",
+        "checkpoint": "Your answer accuracy (manual or automated) improves by at least 10% over the baseline without reranking.",
+        "color": "#6C63FF"
+      },
+      {
+        "belt": "Brown",
+        "duration": "4-6 weeks",
+        "objective": "Fine-tune the LLM (qwen2.5:7b) with LoRA on domain-specific trading data for better generation.",
+        "resources": [
+          {
+            "type": "video",
+            "title": "Fine-tuning LLMs with LoRA",
+            "free": true
+          },
+          {
+            "type": "article",
+            "title": "Domain-Adaptive Pretraining for Finance",
+            "free": true
+          },
+          {
+            "type": "book",
+            "title": "Finetuning LLMs",
+            "author": "Sebastian Raschka",
+            "free": false
+          }
+        ],
+        "project": "Collect 200 question-answer pairs from your trading logs and fine-tune qwen2.5:7b using LoRA (rank=8). Compare generated summaries before and after fine-tuning.",
+        "checkpoint": "You can produce trading-specific outputs (e.g., market summaries) that are more concise and accurate than the base model.",
+        "color": "#C0764A"
+      },
+      {
+        "belt": "Black",
+        "duration": "4-6 weeks",
+        "objective": "Productionize the optimized RAG pipeline with caching, concurrency, and monitoring for low-latency live trading.",
+        "resources": [
+          {
+            "type": "video",
+            "title": "Production RAG with Ollama",
+            "free": true
+          },
+          {
+            "type": "article",
+            "title": "Optimizing LLM Inference for Real-time Systems",
+            "free": true
+          },
+          {
+            "type": "book",
+            "title": "Designing Data-Intensive Applications",
+            "author": "Martin Kleppmann",
+            "free": false
+          }
+        ],
+        "project": "Implement response caching (e.g., Redis), async request handling (e.g., AsyncIO or FastAPI), and a monitoring dashboard (e.g., Prometheus + Grafana) for query latency and cache hit rate.",
+        "checkpoint": "Your system can handle 10+ queries per second with p95 latency under 500ms and you can observe throughput in a dashboard.",
+        "color": "#333333"
+      }
+    ],
+    "tips": [
+      "Start with a small dataset (5-10 documents) to iterate quickly on chunking and embeddings before scaling up.",
+      "Use evaluation metrics like recall@k, mean reciprocal rank (MRR), and end-to-end answer correctness (e.g., LLM-as-judge).",
+      "Monitor token usage and inference time early; bottlenecks often shift from retrieval to LLM generation as you optimize."
+    ]
+  },
+  "updatedAt": "2026-05-19T01:29:09.862Z"
+}
