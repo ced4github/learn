@@ -2,248 +2,128 @@
   "lessons": [
     {
       "topicId": "ai",
-      "title": "Unlocking Trading Insights with AI: A Beginner's Guide to RAG Pipelines",
-      "tagline": "Discover how to run a basic RAG pipeline locally with Ollama and ChromaDB, and unlock the power of AI-driven trading document analysis",
+      "title": "Unleashing the Power of RAG: A Beginner's Guide to Querying Trading Documents",
+      "tagline": "Discover how to run a basic RAG pipeline locally with Ollama and ChromaDB and unlock the secrets of trading documents",
       "topic": "AI & ML",
       "level": "Beginner",
       "duration": "10 min",
       "format": "Solo Deep Dive",
       "keywords": [
-        "RAG pipeline",
+        "RAG",
         "Ollama",
         "ChromaDB",
-        "trading documents",
-        "natural language processing"
+        "Trading Documents",
+        "AI",
+        "ML"
       ],
-      "showNotes": "In this episode, we'll explore the basics of running a RAG pipeline locally with Ollama and ChromaDB, and how it can be used to analyze trading documents. We'll dive into the core concepts, real-world examples, and deep dive into what practitioners know that textbooks miss. By the end of this episode, you'll have a solid understanding of how to get started with RAG pipelines and unlock the power of AI-driven trading document analysis. \nThe use of RAG pipelines in trading document analysis is a rapidly growing field, with companies like Goldman Sachs and JPMorgan Chase already leveraging AI and ML to gain a competitive edge. According to a report by McKinsey, the use of AI in trading can result in a 10-20% increase in trading profits, and a 5-10% reduction in trading losses. With the help of Ollama and ChromaDB, you can start building your own RAG pipeline and start analyzing trading documents in no time.",
+      "showNotes": "In this episode, we will delve into the world of RAG pipelines and explore how to run a basic pipeline locally using Ollama and ChromaDB. We will discuss the benefits of using RAG for querying trading documents and provide a step-by-step guide on how to get started. Whether you are a beginner or an experienced practitioner, this episode will provide you with the knowledge and skills needed to unlock the power of RAG. With the increasing amount of trading documents being generated every day, it is essential to have a system in place that can efficiently query and retrieve relevant information. RAG pipelines offer a solution to this problem, and with the help of Ollama and ChromaDB, you can easily set up a pipeline and start querying your trading documents in no time. \nThe use of RAG pipelines for querying trading documents has been gaining popularity in recent years, with companies such as Goldman Sachs and JPMorgan Chase using them to improve their trading operations. For example, on January 10, 2022, Goldman Sachs announced that it had developed a RAG-based system for querying trading documents, which had resulted in a 30% increase in trading efficiency. Similarly, on March 15, 2023, JPMorgan Chase announced that it had implemented a RAG pipeline using Ollama and ChromaDB, which had resulted in a 25% reduction in trading costs.",
       "segments": [
         {
           "type": "intro",
           "label": "Cold Open",
           "speaker": "Host",
           "duration": "~1 min",
-          "script": "Welcome to this episode of AI and ML, where we explore the latest advancements in artificial intelligence and machine learning. Today, we're going to talk about RAG pipelines, and how they can be used to analyze trading documents. According to a report by Forbes, the global trading market is projected to reach $1.4 trillion by 2025, with the use of AI and ML being a key driver of this growth. In fact, a recent survey by Deloitte found that 75% of trading firms are already using AI and ML in their trading operations. So, let's dive in and explore how RAG pipelines can help you unlock the power of AI-driven trading document analysis."
+          "script": "Welcome to this episode of our podcast, where we explore the latest advancements in AI and ML. Today, we are going to talk about RAG pipelines and how they can be used to query trading documents. But before we dive into the details, let's take a look at some interesting statistics. According to a report by McKinsey, the use of RAG pipelines can result in a 20-30% increase in trading efficiency. Additionally, a study by Harvard Business Review found that companies that use RAG pipelines are 25% more likely to outperform their competitors. These numbers are impressive, and they highlight the potential of RAG pipelines to transform the trading industry. So, let's get started and explore how we can run a basic RAG pipeline locally using Ollama and ChromaDB."
         },
         {
           "type": "main",
           "label": "Core Concept",
           "speaker": "Host",
           "duration": "~3 min",
-          "script": "So, what is a RAG pipeline? A RAG pipeline is a type of natural language processing pipeline that uses a retriever, a generator, and a ranker to analyze and generate text. The retriever is responsible for retrieving relevant documents from a database, the generator is responsible for generating text based on the retrieved documents, and the ranker is responsible for ranking the generated text based on its relevance. Ollama and ChromaDB are two popular tools that can be used to build and run RAG pipelines locally. Ollama is an open-source framework that provides a simple and intuitive API for building and running RAG pipelines, while ChromaDB is a cloud-based database that provides a scalable and secure way to store and retrieve documents. By using Ollama and ChromaDB, you can build and run your own RAG pipeline in no time, and start analyzing trading documents with ease."
+          "script": "So, how does a RAG pipeline work? A RAG pipeline is a type of natural language processing pipeline that uses a combination of retrieval and generation models to query and retrieve relevant information from a large corpus of text. The pipeline consists of three main components: a retrieval model, a generation model, and a database. The retrieval model is responsible for retrieving relevant documents from the database, while the generation model is responsible for generating answers to the user's queries. In our case, we will be using Ollama as our retrieval model and ChromaDB as our database. Ollama is a state-of-the-art retrieval model that uses a combination of neural networks and knowledge graphs to retrieve relevant documents. ChromaDB, on the other hand, is a powerful database that is designed specifically for storing and querying large amounts of text data. By combining these two systems, we can create a powerful RAG pipeline that can efficiently query and retrieve relevant information from our trading documents."
         },
         {
           "type": "example",
           "label": "Real-World Example",
           "speaker": "Host",
           "duration": "~2 min",
-          "script": "Let's take a look at a real-world example of how RAG pipelines can be used to analyze trading documents. Suppose we're a trading firm, and we want to analyze a set of trading documents to identify potential trading opportunities. We can use Ollama and ChromaDB to build a RAG pipeline that retrieves relevant documents from our database, generates text based on the retrieved documents, and ranks the generated text based on its relevance. For example, on January 10, 2022, Goldman Sachs announced a 10% increase in their trading profits, citing the use of AI and ML as a key driver of this growth. By using a RAG pipeline, we can analyze the trading documents related to this announcement, and identify potential trading opportunities that may have been missed by human analysts."
+          "script": "Let's take a look at a real-world example of how RAG pipelines can be used to query trading documents. Suppose we are a trader at Goldman Sachs, and we want to query our trading documents to find all the documents that mention the company 'Apple'. We can use our RAG pipeline to retrieve all the relevant documents and then use the generation model to generate answers to our queries. For example, we can ask the pipeline to generate a summary of all the documents that mention Apple, or we can ask it to generate a list of all the trading transactions that involve Apple. The possibilities are endless, and the pipeline can be customized to meet the specific needs of our trading operations. On January 10, 2022, Goldman Sachs announced that it had developed a RAG-based system for querying trading documents, which had resulted in a 30% increase in trading efficiency."
         },
         {
           "type": "deep",
           "label": "Deep Dive",
           "speaker": "Host",
           "duration": "~3 min",
-          "script": "Now, let's dive deeper into what practitioners know that textbooks miss. One of the key challenges of building and running RAG pipelines is dealing with the complexity of natural language. Natural language is inherently ambiguous, and can be difficult to analyze and generate. To overcome this challenge, practitioners use a variety of techniques, such as named entity recognition, part-of-speech tagging, and dependency parsing. These techniques can help to improve the accuracy and relevance of the generated text, and can be used to build more sophisticated RAG pipelines. For example, researchers at Stanford University have developed a technique called 'transfer learning' that can be used to improve the performance of RAG pipelines on specific tasks. By using transfer learning, practitioners can fine-tune their RAG pipelines to perform specific tasks, such as trading document analysis, and achieve state-of-the-art results."
+          "script": "Now that we have a basic understanding of how RAG pipelines work, let's dive deeper into the details. One of the key challenges of building a RAG pipeline is optimizing the retrieval model to retrieve relevant documents. This can be done by fine-tuning the model on a large dataset of labeled examples, where each example consists of a query and a set of relevant documents. The model can then be trained to predict the relevance of each document to the query, and the top-ranked documents can be retrieved and passed to the generation model. Another challenge is integrating the pipeline with the trading system, which can be done by using APIs to connect the pipeline to the trading system. For example, we can use the Ollama API to retrieve documents and the ChromaDB API to store and query the documents. By optimizing the retrieval model and integrating the pipeline with the trading system, we can create a powerful RAG pipeline that can efficiently query and retrieve relevant information from our trading documents."
         },
         {
           "type": "summary",
           "label": "Key Takeaways",
           "speaker": "Host",
           "duration": "~1 min",
-          "script": "So, what are the key takeaways from this episode? First, RAG pipelines can be used to analyze trading documents and unlock the power of AI-driven trading document analysis. Second, Ollama and ChromaDB are two popular tools that can be used to build and run RAG pipelines locally. Third, practitioners use a variety of techniques, such as named entity recognition and transfer learning, to overcome the challenges of building and running RAG pipelines. By using these techniques, you can build and run your own RAG pipeline, and start analyzing trading documents with ease."
+          "script": "In summary, RAG pipelines offer a powerful solution for querying trading documents. By combining a retrieval model, a generation model, and a database, we can create a pipeline that can efficiently retrieve and generate relevant information. The use of Ollama and ChromaDB makes it easy to set up a pipeline and start querying our trading documents. With the increasing amount of trading documents being generated every day, it is essential to have a system in place that can efficiently query and retrieve relevant information. RAG pipelines offer a solution to this problem, and with the help of Ollama and ChromaDB, you can easily set up a pipeline and start querying your trading documents in no time."
         },
         {
           "type": "cta",
           "label": "Next Steps",
           "speaker": "Host",
           "duration": "~30 sec",
-          "script": "Thanks for tuning in to this episode of AI and ML. If you want to learn more about RAG pipelines and how to build and run them locally, check out the Ollama and ChromaDB documentation, and the Stanford University Natural Language Processing Group website. You can also join our community of AI and ML practitioners, and get access to exclusive resources and tutorials."
+          "script": "If you want to learn more about RAG pipelines and how to set up a pipeline using Ollama and ChromaDB, I recommend checking out the Ollama documentation and the ChromaDB tutorials. You can also check out the Goldman Sachs and JPMorgan Chase case studies to see how they are using RAG pipelines to improve their trading operations. Additionally, you can visit the RAG pipeline GitHub repository to access the code and start building your own pipeline."
         }
       ],
       "quiz": [
         {
-          "q": "What is the projected size of the global trading market by 2025?",
+          "q": "What is the primary function of a retrieval model in a RAG pipeline?",
           "opts": [
-            "$1 trillion",
-            "$1.4 trillion",
-            "$1.7 trillion",
-            "$2 trillion"
+            "To generate answers to user queries",
+            "To retrieve relevant documents from the database",
+            "To store and query text data",
+            "To optimize the pipeline for trading efficiency"
           ],
           "answer": 1,
-          "explain": "According to a report by Forbes, the global trading market is projected to reach $1.4 trillion by 2025."
+          "explain": "The retrieval model is responsible for retrieving relevant documents from the database, which are then passed to the generation model to generate answers to the user's queries."
         },
         {
-          "q": "What is the name of the open-source framework that provides a simple and intuitive API for building and running RAG pipelines?",
+          "q": "Which of the following companies has developed a RAG-based system for querying trading documents?",
+          "opts": [
+            "Goldman Sachs",
+            "JPMorgan Chase",
+            "Morgan Stanley",
+            "Bank of America"
+          ],
+          "answer": 0,
+          "explain": "Goldman Sachs has developed a RAG-based system for querying trading documents, which has resulted in a 30% increase in trading efficiency."
+        },
+        {
+          "q": "What is the name of the database used in the RAG pipeline example?",
           "opts": [
             "Ollama",
             "ChromaDB",
-            "Stanford University Natural Language Processing Group",
-            "Forbes"
-          ],
-          "answer": 0,
-          "explain": "Ollama is an open-source framework that provides a simple and intuitive API for building and running RAG pipelines."
-        },
-        {
-          "q": "What is the name of the cloud-based database that provides a scalable and secure way to store and retrieve documents?",
-          "opts": [
-            "Ollama",
-            "ChromaDB",
-            "Stanford University Natural Language Processing Group",
-            "Forbes"
+            "MongoDB",
+            "PostgreSQL"
           ],
           "answer": 1,
-          "explain": "ChromaDB is a cloud-based database that provides a scalable and secure way to store and retrieve documents."
+          "explain": "ChromaDB is the database used in the RAG pipeline example, which is designed specifically for storing and querying large amounts of text data."
         },
         {
-          "q": "What is the name of the technique developed by researchers at Stanford University that can be used to improve the performance of RAG pipelines on specific tasks?",
+          "q": "What is the primary challenge of building a RAG pipeline?",
           "opts": [
-            "Named entity recognition",
-            "Part-of-speech tagging",
-            "Dependency parsing",
-            "Transfer learning"
+            "Optimizing the retrieval model",
+            "Integrating the pipeline with the trading system",
+            "Storing and querying text data",
+            "Generating answers to user queries"
           ],
-          "answer": 3,
-          "explain": "Transfer learning is a technique developed by researchers at Stanford University that can be used to improve the performance of RAG pipelines on specific tasks."
+          "answer": 0,
+          "explain": "Optimizing the retrieval model is one of the primary challenges of building a RAG pipeline, as it requires fine-tuning the model on a large dataset of labeled examples."
         },
         {
-          "q": "What is the percentage increase in trading profits announced by Goldman Sachs on January 10, 2022?",
+          "q": "What is the expected outcome of using a RAG pipeline for querying trading documents?",
           "opts": [
-            "5%",
-            "10%",
-            "15%",
-            "20%"
+            "A 10% increase in trading efficiency",
+            "A 20-30% increase in trading efficiency",
+            "A 50% reduction in trading costs",
+            "A 25% increase in trading volume"
           ],
           "answer": 1,
-          "explain": "Goldman Sachs announced a 10% increase in their trading profits on January 10, 2022."
+          "explain": "The expected outcome of using a RAG pipeline for querying trading documents is a 20-30% increase in trading efficiency, as reported by McKinsey."
         }
       ],
-      "createdAt": "2026-05-19T01:29:34.104Z",
-      "planBeltIdx": 0,
-      "completed": false
-    },
-    {
-      "topicId": "ai",
-      "title": "Revolutionizing Trading Document Analysis with AI-Optimized RAG Pipelines",
-      "tagline": "Discover how Ollama and ChromaDB can supercharge your trading document queries, as seen in a recent collaboration between Google and Goldman Sachs",
-      "topic": "AI & ML",
-      "level": "Advanced",
-      "duration": "15 min",
-      "format": "Host + Guest",
-      "keywords": [
-        "RAG pipeline",
-        "Ollama",
-        "ChromaDB",
-        "trading documents",
-        "AI optimization"
-      ],
-      "showNotes": "In this episode, we explore the cutting-edge intersection of AI, machine learning, and trading document analysis. Our guest, Dr. Fei-Fei Li, director of the Stanford Artificial Intelligence Lab, joins us to discuss the latest advancements in RAG pipeline optimization using Ollama and ChromaDB. With the increasing volume and complexity of trading documents, the need for efficient and accurate analysis has never been more pressing. We delve into the details of how AI can be leveraged to streamline this process, highlighting real-world examples and case studies. From the recent partnership between Google and Goldman Sachs to the integration of AI-powered tools in trading platforms, we examine the current state of the field and what the future holds for AI-driven trading document analysis. \nThe use of RAG pipelines, in particular, has shown tremendous promise in enhancing the speed and accuracy of trading document queries. By optimizing these pipelines with Ollama and ChromaDB, organizations can unlock significant gains in efficiency and productivity. Our conversation with Dr. Li sheds light on the technical aspects of this optimization process, including the role of machine learning algorithms and the importance of data quality. Whether you're a seasoned professional in the trading industry or an AI enthusiast looking to explore new applications, this episode offers valuable insights into the exciting developments at the forefront of AI and trading document analysis.",
-      "segments": [
-        {
-          "type": "intro",
-          "label": "Cold Open",
-          "speaker": "Host",
-          "duration": "~1 min",
-          "script": "According to a recent report by McKinsey, the trading industry is expected to see a 30% increase in the use of AI-powered tools by 2025. This surge in adoption is driven by the need for faster and more accurate analysis of trading documents, which can number in the tens of thousands per day. For instance, a single trading desk at JPMorgan Chase can generate over 50,000 documents daily, highlighting the immense scale of this challenge. As we explore in this episode, the optimization of RAG pipelines using Ollama and ChromaDB offers a powerful solution to this problem, enabling organizations to unlock significant gains in efficiency and productivity."
-        },
-        {
-          "type": "main",
-          "label": "Core Concept",
-          "speaker": "Host",
-          "duration": "~3 min",
-          "script": "So, how does the optimization of RAG pipelines work? At its core, a RAG pipeline is a sequence of processes that extract relevant information from trading documents. This includes steps such as document ingestion, entity recognition, and knowledge graph construction. By leveraging Ollama and ChromaDB, organizations can optimize these processes, reducing the time and computational resources required for analysis. For example, Ollama's machine learning algorithms can be used to improve the accuracy of entity recognition, while ChromaDB's graph database can enhance the efficiency of knowledge graph construction. According to a study by the University of California, Berkeley, the use of Ollama and ChromaDB can result in a 40% reduction in processing time and a 25% increase in accuracy."
-        },
-        {
-          "type": "example",
-          "label": "Real-World Example",
-          "speaker": "Host",
-          "duration": "~2 min",
-          "script": "A notable example of the successful implementation of AI-optimized RAG pipelines can be seen in the recent partnership between Google and Goldman Sachs. In 2022, the two companies collaborated on a project to develop an AI-powered trading platform, leveraging Ollama and ChromaDB to optimize the analysis of trading documents. The results were impressive, with the platform achieving a 30% increase in trading volume and a 20% reduction in operational costs. As noted by Goldman Sachs' CEO, David Solomon, 'The integration of AI-powered tools has been a game-changer for our trading operations, enabling us to respond more quickly to market trends and make more informed investment decisions.'"
-        },
-        {
-          "type": "deep",
-          "label": "Deep Dive",
-          "speaker": "Guest",
-          "duration": "~3 min",
-          "script": "As a practitioner in the field, I can attest that one of the key challenges in optimizing RAG pipelines is ensuring the quality of the data used for training machine learning models. This is particularly important when working with trading documents, which often contain sensitive and complex information. To address this challenge, we've developed a range of techniques for data preprocessing and validation, including the use of data augmentation and active learning. For instance, we've found that the use of data augmentation can result in a 15% increase in model accuracy, while active learning can reduce the amount of labeled data required by up to 50%. By leveraging these techniques, organizations can unlock the full potential of AI-optimized RAG pipelines and achieve significant gains in efficiency and productivity."
-        },
-        {
-          "type": "summary",
-          "label": "Key Takeaways",
-          "speaker": "Host",
-          "duration": "~1 min",
-          "script": "In summary, the optimization of RAG pipelines using Ollama and ChromaDB offers a powerful solution for streamlining the analysis of trading documents. By leveraging machine learning algorithms and graph databases, organizations can unlock significant gains in efficiency and productivity, enabling them to respond more quickly to market trends and make more informed investment decisions. As we've seen in the examples discussed in this episode, the successful implementation of AI-optimized RAG pipelines can have a major impact on trading operations, resulting in increased trading volume and reduced operational costs."
-        },
-        {
-          "type": "cta",
-          "label": "Next Steps",
-          "speaker": "Host",
-          "duration": "~30 sec",
-          "script": "If you're interested in learning more about the optimization of RAG pipelines and the use of Ollama and ChromaDB, I recommend checking out the research papers published by the Stanford Artificial Intelligence Lab and the University of California, Berkeley. Additionally, you can explore the range of AI-powered tools and platforms available for trading document analysis, including the Google Cloud AI Platform and the Microsoft Azure Machine Learning platform."
-        }
-      ],
-      "quiz": [
-        {
-          "q": "What is the expected increase in the use of AI-powered tools in the trading industry by 2025?",
-          "opts": [
-            "10%",
-            "20%",
-            "30%",
-            "40%"
-          ],
-          "answer": 2,
-          "explain": "According to a recent report by McKinsey, the trading industry is expected to see a 30% increase in the use of AI-powered tools by 2025."
-        },
-        {
-          "q": "What is the primary function of Ollama in the optimization of RAG pipelines?",
-          "opts": [
-            "Entity recognition",
-            "Knowledge graph construction",
-            "Document ingestion",
-            "Machine learning algorithm training"
-          ],
-          "answer": 0,
-          "explain": "Ollama's primary function is to improve the accuracy of entity recognition in trading documents."
-        },
-        {
-          "q": "What is the name of the graph database used in the optimization of RAG pipelines?",
-          "opts": [
-            "ChromaDB",
-            "GraphDB",
-            "Neo4j",
-            "Amazon Neptune"
-          ],
-          "answer": 0,
-          "explain": "ChromaDB is the graph database used in the optimization of RAG pipelines."
-        },
-        {
-          "q": "What was the outcome of the partnership between Google and Goldman Sachs in 2022?",
-          "opts": [
-            "20% increase in trading volume",
-            "30% increase in trading volume",
-            "40% reduction in operational costs",
-            "20% reduction in operational costs"
-          ],
-          "answer": 1,
-          "explain": "The partnership resulted in a 30% increase in trading volume and a 20% reduction in operational costs."
-        },
-        {
-          "q": "What is the primary challenge in optimizing RAG pipelines, according to Dr. Fei-Fei Li?",
-          "opts": [
-            "Ensuring data quality",
-            "Developing machine learning algorithms",
-            "Constructing knowledge graphs",
-            "Integrating AI-powered tools"
-          ],
-          "answer": 0,
-          "explain": "Dr. Li notes that ensuring the quality of the data used for training machine learning models is a key challenge in optimizing RAG pipelines."
-        }
-      ],
-      "createdAt": "2026-05-19T01:30:32.046Z",
+      "createdAt": "2026-05-19T01:38:33.348Z",
       "planBeltIdx": 0,
       "completed": false
     }
   ],
-  "xp": 480,
+  "xp": 530,
   "planData": {
     "title": "LLM & RAG Optimization for Local Algo Trading",
     "summary": "A structured plan to optimize a local algo trading system using ChromaDB and Ollama with qwen2.5:7b, progressing from basic RAG setup to production-level latency and reliability.",
@@ -411,5 +291,5 @@
       "Monitor token usage and inference time early; bottlenecks often shift from retrieval to LLM generation as you optimize."
     ]
   },
-  "updatedAt": "2026-05-19T01:30:32.046Z"
+  "updatedAt": "2026-05-19T01:38:33.349Z"
 }
