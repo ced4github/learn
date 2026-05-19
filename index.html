@@ -234,7 +234,7 @@ select.form-input option{background:var(--surface2)}
         <div style="font-size:12px;font-weight:500" id="xp-level-label">White Belt</div>
         <div style="display:flex;align-items:center;gap:6px">
           <div class="badge tag" id="xp-badge" style="color:var(--accent);border-color:rgba(108,99,255,.3)">0 XP</div>
-          <button id="notion-sync-btn" onclick="showNotionKeyModal()" title="Connect Notion sync" style="background:transparent;border:1px solid var(--border);border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;color:var(--text3);transition:all .15s">🔗</button>
+          <button id="cloud-sync-btn" onclick="showCloudModal()" title="Set up cloud sync" style="background:transparent;border:1px solid var(--border);border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;color:var(--text3);transition:all .15s">🔗</button>
           <button onclick="showKeyModal()" title="Set API Key" style="background:transparent;border:1px solid var(--border);border-radius:5px;padding:2px 6px;cursor:pointer;font-size:11px;color:var(--text3)" >🔑</button>
         </div>
       </div>
@@ -306,214 +306,154 @@ function load(){
 }
 
 // ══════════════════════════════════════════
-//  NOTION — primary database
+//  GITHUB DB — read/write db.json in your repo
 // ══════════════════════════════════════════
-const NOTION={
-  LESSONS_DS:"a703e2be-d453-489e-b037-7633a9862080",  // data source id
-  LESSONS_DB:"f501e7c3-3ff8-4228-956e-9076400f8a55",  // database id
-  PLANS_DB:"5ae486ee-0b00-4c4a-8f59-3783a33418a4",
-  API:"https://api.notion.com/v1",
-  VER:"2022-06-28",
-};
-function getNotionKey(){return localStorage.getItem("lf_notion_key")||"";}
-function saveNotionKey(k){localStorage.setItem("lf_notion_key",k.trim());}
-function notionHeaders(){
-  return{"Content-Type":"application/json","Authorization":"Bearer "+getNotionKey(),"Notion-Version":NOTION.VER,"anthropic-dangerous-direct-browser-access":"true"};
+// Uses GitHub Contents API — CORS-enabled, works from browser
+// db.json lives in the same repo as index.html
+
+function getGHToken(){return localStorage.getItem("lf_gh_token")||"";}
+function getGHRepo(){return localStorage.getItem("lf_gh_repo")||"";}   // e.g. "ced4github/learn"
+function saveGHToken(t){localStorage.setItem("lf_gh_token",t.trim());}
+function saveGHRepo(r){localStorage.setItem("lf_gh_repo",r.trim());}
+
+const GH_FILE="db.json";
+const GH_API="https://api.github.com";
+
+function ghHeaders(){
+  return{"Content-Type":"application/json","Authorization":"Bearer "+getGHToken(),"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};
 }
 
-// Load all lessons from Notion on startup
-async function notionLoadLessons(){
-  if(!getNotionKey())return false;
+// Pull db.json from GitHub — returns parsed object or null
+async function ghPull(){
+  if(!getGHToken()||!getGHRepo())return null;
   try{
     showSyncStatus("loading");
-    const res=await fetch(`${NOTION.API}/databases/${NOTION.LESSONS_DB}/query`,{
-      method:"POST",headers:notionHeaders(),
-      body:JSON.stringify({sorts:[{timestamp:"created_time",direction:"descending"}],page_size:50})
-    });
+    const res=await fetch(`${GH_API}/repos/${getGHRepo()}/contents/${GH_FILE}`,{headers:ghHeaders()});
+    if(res.status===404)return null; // file doesn't exist yet — first time
+    if(!res.ok)throw new Error("GitHub "+res.status);
     const data=await res.json();
-    if(!data.results)return false;
-    const lessons=[];
-    for(const page of data.results){
-      const props=page.properties;
-      const lessonId=props.LessonID?.rich_text?.[0]?.plain_text||"";
-      const title=props.Title?.title?.[0]?.plain_text||"";
-      if(!title)continue;
-      // Fetch the full lesson JSON stored in the page body
-      try{
-        const pageRes=await fetch(`${NOTION.API}/blocks/${page.id}/children`,{headers:notionHeaders()});
-        const blocks=await pageRes.json();
-        const jsonBlock=blocks.results?.find(b=>b.type==="code"||b.paragraph?.rich_text?.[0]?.plain_text?.startsWith("{"));
-        let lessonData={};
-        if(jsonBlock){
-          const raw=jsonBlock.code?.rich_text?.[0]?.plain_text||jsonBlock.paragraph?.rich_text?.[0]?.plain_text||"";
-          try{lessonData=JSON.parse(raw);}catch(e){}
-        }
-        lessons.push({
-          id:lessonId||page.id,
-          notionPageId:page.id,
-          title,
-          level:props.Level?.select?.name||"Intermediate",
-          duration:props.Duration?.rich_text?.[0]?.plain_text||"",
-          format:props.Format?.rich_text?.[0]?.plain_text||"",
-          keywords:(props.Keywords?.rich_text?.[0]?.plain_text||"").split(",").map(k=>k.trim()).filter(Boolean),
-          topicId:topicIdFromLabel(props.Topic?.select?.name||""),
-          completed:false,
-          createdAt:page.created_time,
-          ...lessonData,
-        });
-      }catch(e){
-        lessons.push({id:lessonId||page.id,notionPageId:page.id,title,topicId:"custom",level:"Intermediate",duration:"",segments:[]});
-      }
-    }
-    state.lessons=lessons;
-    state.xp=lessons.length*50;
-    save();
-    showSyncStatus("done",lessons.length+" lessons loaded");
-    return true;
+    const decoded=JSON.parse(atob(data.content.replace(/\n/g,"")));
+    // Store sha for next write (required by GitHub API)
+    localStorage.setItem("lf_gh_sha",data.sha);
+    showSyncStatus("done");
+    return decoded;
   }catch(e){
-    showSyncStatus("error","Notion load failed: "+e.message);
-    return false;
+    showSyncStatus("error",e.message);
+    console.warn("GitHub pull failed:",e);
+    return null;
   }
 }
 
-function topicIdFromLabel(label){
-  const map={"AI & ML":"ai","DeFi & Crypto":"defi","DevSecOps":"devsecops","Macro & Markets":"macro","Blockchain Security":"blockchain","Wealth Tech":"wealth"};
-  return map[label]||"custom";
-}
-
-// Push a new lesson to Notion — stores full JSON in a code block
-async function notionPushLesson(lesson){
-  if(!getNotionKey())return;
-  const topicMap={ai:"AI & ML",defi:"DeFi & Crypto",devsecops:"DevSecOps",macro:"Macro & Markets",blockchain:"Blockchain Security",wealth:"Wealth Tech",custom:"Custom"};
-  const props={
-    Title:[{text:{content:lesson.title||"Untitled"}}],
-    Topic:{select:{name:topicMap[lesson.topicId]||"Custom"}},
-    Level:{select:{name:lesson.level||"Intermediate"}},
-    Duration:{rich_text:[{text:{content:lesson.duration||""}}]},
-    Format:{rich_text:[{text:{content:lesson.format||""}}]},
-    Keywords:{rich_text:[{text:{content:(lesson.keywords||[]).join(", ")}}]},
-    XP:{number:50},
-    LessonID:{rich_text:[{text:{content:lesson.id||""}}]},
-  };
-  // Store full lesson JSON as a code block so we can restore it later
-  const jsonStr=JSON.stringify(lesson);
-  const children=[
-    {object:"block",type:"callout",callout:{rich_text:[{text:{content:lesson.tagline||lesson.title}}],icon:{emoji:"🎙️"},color:"purple_background"}},
-    // Store full data as code block for reliable restore
-    {object:"block",type:"code",code:{rich_text:[{text:{content:jsonStr.slice(0,1800)}}],language:"json"}},
-  ];
-  // Add script segments as readable content
-  (lesson.segments||[]).forEach(s=>{
-    children.push({object:"block",type:"heading_2",heading_2:{rich_text:[{text:{content:s.label+" ("+s.duration+")"}}]}});
-    const txt=s.script||"";
-    for(let i=0;i<Math.min(txt.length,3600);i+=1800){
-      children.push({object:"block",type:"paragraph",paragraph:{rich_text:[{text:{content:txt.slice(i,i+1800)}}]}});
+// Push state to db.json on GitHub
+async function ghPush(){
+  if(!getGHToken()||!getGHRepo())return;
+  try{
+    const payload={lessons:state.lessons,xp:state.xp,planData:state.planData,updatedAt:new Date().toISOString()};
+    const content=btoa(unescape(encodeURIComponent(JSON.stringify(payload,null,2))));
+    const sha=localStorage.getItem("lf_gh_sha")||"";
+    const body={message:"LearnFast: update db.json",content};
+    if(sha)body.sha=sha; // required for updates, omit for first create
+    const res=await fetch(`${GH_API}/repos/${getGHRepo()}/contents/${GH_FILE}`,{
+      method:"PUT",headers:ghHeaders(),body:JSON.stringify(body)});
+    if(!res.ok){
+      const err=await res.json();
+      throw new Error(err.message||"GitHub "+res.status);
     }
-  });
-  try{
-    const res=await fetch(`${NOTION.API}/pages`,{method:"POST",headers:notionHeaders(),
-      body:JSON.stringify({parent:{database_id:NOTION.LESSONS_DB},properties:props,children:children.slice(0,50)})});
     const data=await res.json();
-    if(data.id)lesson.notionPageId=data.id; // store page id for later deletion
-    save();
-    showSyncToast("Synced to Notion ✓");
-  }catch(e){console.warn("Notion push failed:",e);}
+    // Update sha for next write
+    localStorage.setItem("lf_gh_sha",data.content?.sha||sha);
+    showSyncToast("Saved to GitHub db.json");
+  }catch(e){
+    showSyncToast("GitHub save failed: "+e.message,false);
+    console.warn("GitHub push failed:",e);
+  }
 }
 
-// Push learning plan
-async function notionPushPlan(plan){
-  if(!getNotionKey()||!plan)return;
-  const props={
-    Title:[{text:{content:plan.title||"My Learning Plan"}}],
-    Goal:{rich_text:[{text:{content:plan.summary||""}}]},
-    CurrentBelt:{rich_text:[{text:{content:getBelt().name}}]},
-    TotalXP:{number:state.xp},
-    UpdatedAt:{rich_text:[{text:{content:new Date().toISOString()}}]},
-  };
-  const children=[
-    {object:"block",type:"callout",callout:{rich_text:[{text:{content:plan.summary||""}}],icon:{emoji:"🎯"},color:"blue_background"}},
-    {object:"block",type:"code",code:{rich_text:[{text:{content:JSON.stringify(plan).slice(0,1800)}}],language:"json"}},
-  ];
-  (plan.belts||[]).forEach(b=>{
-    children.push({object:"block",type:"heading_2",heading_2:{rich_text:[{text:{content:b.belt+" Belt — "+b.duration}}]}});
-    children.push({object:"block",type:"paragraph",paragraph:{rich_text:[{text:{content:b.objective||""}}]}});
-  });
-  try{
-    await fetch(`${NOTION.API}/pages`,{method:"POST",headers:notionHeaders(),
-      body:JSON.stringify({parent:{database_id:NOTION.PLANS_DB},properties:props,children:children.slice(0,50)})});
-    showSyncToast("Plan synced to Notion ✓");
-  }catch(e){console.warn("Notion plan push failed:",e);}
-}
-
-function showSyncStatus(state,msg){
-  const btn=document.getElementById("notion-sync-btn");
-  if(!btn)return;
-  if(state==="loading"){btn.textContent="⏳";btn.title="Loading from Notion...";}
-  else if(state==="done"){btn.textContent="🔗";btn.title=msg||"Synced";}
-  else if(state==="error"){btn.textContent="⚠";btn.title=msg||"Sync error";}
+function showSyncStatus(st,msg){
+  const btn=document.getElementById("cloud-sync-btn");if(!btn)return;
+  const map={loading:["⏳","#FFB347"],done:["☁","#43D9AD"],error:["⚠","#FF6584"]};
+  const[icon,color]=map[st]||["☁","var(--text3)"];
+  btn.textContent=icon;btn.style.color=color;
+  btn.title=msg||(st==="done"?"GitHub sync active":st==="loading"?"Syncing...":"Sync error");
 }
 function showSyncToast(msg,ok=true){
   const t=document.createElement("div");
-  t.style.cssText=`position:fixed;bottom:20px;right:20px;z-index:9999;background:${ok?"#1a2e1a":"#2e1a1a"};border:1px solid ${ok?"rgba(67,217,173,.3)":"rgba(255,101,132,.3)"};border-radius:8px;padding:10px 16px;font-size:12px;color:${ok?"#43D9AD":"#FF6584"};font-family:'DM Mono',monospace;pointer-events:none;transition:opacity .3s`;
+  t.style.cssText="position:fixed;bottom:20px;right:20px;z-index:9999;background:"+(ok?"#1a2e1a":"#2e1a1a")+";border:1px solid "+(ok?"rgba(67,217,173,.3)":"rgba(255,101,132,.3)")+";border-radius:8px;padding:10px 16px;font-size:12px;color:"+(ok?"#43D9AD":"#FF6584")+";font-family:'DM Mono',monospace;pointer-events:none;transition:opacity .3s";
   t.textContent=msg;document.body.appendChild(t);
   setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},3000);
 }
 
-function showNotionKeyModal(){
-  const ex=document.getElementById("notion-key-modal");if(ex)ex.remove();
+function showCloudModal(){
+  const ex=document.getElementById("cloud-modal");if(ex)ex.remove();
   const m=document.createElement("div");
-  m.id="notion-key-modal";
+  m.id="cloud-modal";
   m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;display:flex;align-items:center;justify-content:center;";
-  m.innerHTML=`
-    <div style="background:#111118;border:1px solid rgba(67,217,173,.25);border-radius:14px;padding:28px;width:440px;max-width:92vw">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <span style="font-size:20px">🔗</span>
-        <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">Connect Notion Sync</div>
-      </div>
-      <div style="font-size:12px;color:#8888A0;margin-bottom:6px;line-height:1.7">
-        Lessons and your learning plan will sync to your Notion workspace automatically.<br>
-        Your <strong style="color:#43D9AD">⚡ LearnFast</strong> hub is already created — just add your integration key.
-      </div>
-      <div style="font-size:11px;color:#555;margin-bottom:16px;padding:10px;background:#18181F;border-radius:6px;line-height:1.7">
-        1. Go to <a href="https://www.notion.so/profile/integrations" target="_blank" style="color:#43D9AD">notion.so/profile/integrations</a><br>
-        2. Click <strong>New integration</strong> → name it "LearnFast" → save<br>
-        3. Copy the <strong>Internal Integration Secret</strong> (starts with <code>ntn_</code> or <code>secret_</code>)<br>
-        4. In Notion, open the <strong>⚡ LearnFast</strong> page → ··· → <strong>Connect to</strong> → LearnFast
-      </div>
-      <input id="notion-key-input" type="password" placeholder="ntn_... or secret_..." autocomplete="off"
-        value="${getNotionKey()}"
-        style="width:100%;background:#18181F;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px 14px;color:#F0F0F8;font-family:'DM Mono',monospace;font-size:13px;outline:none;margin-bottom:8px"/>
-      <div id="notion-key-error" style="font-size:11px;color:#FF6584;margin-bottom:8px;display:none"></div>
-      <div style="display:flex;gap:8px">
-        <button onclick="submitNotionKey()" style="flex:1;padding:10px;background:#43D9AD;border:none;border-radius:8px;color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Connect</button>
-        <button onclick="document.getElementById('notion-key-modal').remove()" style="padding:10px 16px;background:transparent;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#8888A0;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Skip</button>
-      </div>
-      ${getNotionKey()?`<div style="margin-top:10px;text-align:center"><button onclick="saveNotionKey('');document.getElementById('notion-key-modal').remove();updateNotionBtn();showSyncToast('Notion disconnected',false)" style="background:transparent;border:none;color:#555;font-size:11px;cursor:pointer;font-family:'DM Mono',monospace">Disconnect Notion</button></div>`:""}
-    </div>`;
+  // Auto-detect repo from current URL if on github.io
+  const urlRepo=location.hostname.includes("github.io")?location.hostname.replace(".github.io","")+(location.pathname.split("/")[1]?"/"+location.pathname.split("/")[1]:""):getGHRepo();
+  m.innerHTML="<div style=\"background:#111118;border:1px solid rgba(67,217,173,.25);border-radius:14px;padding:28px;width:460px;max-width:92vw\">"
+    +"<div style=\"font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:6px\">☁ GitHub Sync</div>"
+    +"<div style=\"font-size:12px;color:#8888A0;margin-bottom:14px;line-height:1.7\">Stores lessons in <strong style=\"color:#43D9AD\">db.json</strong> in your GitHub repo. Works on every device with the same token.</div>"
+    +"<div style=\"background:#18181F;border-radius:8px;padding:12px;font-size:11px;color:#666;margin-bottom:14px;line-height:1.8\">"
+    +"<strong style=\"color:#888\">One-time setup:</strong><br>"
+    +"1. <a href=\"https://github.com/settings/tokens/new\" target=\"_blank\" style=\"color:#43D9AD\">github.com/settings/tokens/new</a><br>"
+    +"2. Note: <em>LearnFast sync</em> · check <strong>repo</strong> scope · Generate<br>"
+    +"3. Paste the token + your repo name below"
+    +"</div>"
+    +"<div style=\"font-size:10px;color:#555;margin-bottom:5px;font-family:'DM Mono',monospace\">GITHUB TOKEN (ghp_...)</div>"
+    +"<input id=\"gh-token-input\" type=\"password\" placeholder=\"ghp_...\" autocomplete=\"off\" value=\""+getGHToken()+"\"  style=\"width:100%;background:#18181F;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 13px;color:#F0F0F8;font-family:'DM Mono',monospace;font-size:12px;outline:none;margin-bottom:8px\"/>"
+    +"<div style=\"font-size:10px;color:#555;margin-bottom:5px;font-family:'DM Mono',monospace\">REPO (username/reponame)</div>"
+    +"<input id=\"gh-repo-input\" type=\"text\" placeholder=\"e.g. ced4github/learn\" autocomplete=\"off\" value=\""+(getGHRepo()||urlRepo)+"\" style=\"width:100%;background:#18181F;border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 13px;color:#F0F0F8;font-family:'DM Mono',monospace;font-size:12px;outline:none;margin-bottom:8px\"/>"
+    +"<div id=\"gh-error\" style=\"font-size:11px;color:#FF6584;margin-bottom:8px;display:none\"></div>"
+    +"<div style=\"display:flex;gap:8px\">"
+    +"<button onclick=\"submitGHKey()\" style=\"flex:1;padding:10px;background:#43D9AD;border:none;border-radius:8px;color:#000;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer\">Connect & Sync</button>"
+    +"<button onclick=\"document.getElementById('cloud-modal').remove()\" style=\"padding:10px 16px;background:transparent;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#8888A0;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer\">Cancel</button>"
+    +"</div>"
+    +(getGHToken()?"<div style=\"margin-top:10px;text-align:center\"><button onclick=\"saveGHToken('');saveGHRepo('');document.getElementById('cloud-modal').remove();updateCloudBtn();showSyncToast('Disconnected',false)\" style=\"background:transparent;border:none;color:#555;font-size:11px;cursor:pointer;font-family:'DM Mono',monospace\">Disconnect</button></div>":"")
+    +"</div>";
   document.body.appendChild(m);
-  document.getElementById("notion-key-input").addEventListener("keydown",e=>{if(e.key==="Enter")submitNotionKey();});
+  document.getElementById("gh-token-input").addEventListener("keydown",e=>{if(e.key==="Enter")submitGHKey();});
 }
-function submitNotionKey(){
-  const val=document.getElementById("notion-key-input").value.trim();
-  const err=document.getElementById("notion-key-error");
-  if(val&&!val.startsWith("ntn_")&&!val.startsWith("secret_")){
-    err.textContent="Key should start with ntn_ or secret_";err.style.display="block";return;
+
+async function submitGHKey(){
+  const token=document.getElementById("gh-token-input").value.trim();
+  const repo=document.getElementById("gh-repo-input").value.trim();
+  const err=document.getElementById("gh-error");
+  if(!token||!repo){err.textContent="Both token and repo are required";err.style.display="block";return;}
+  if(!repo.includes("/")){err.textContent="Repo must be username/reponame";err.style.display="block";return;}
+  saveGHToken(token);saveGHRepo(repo);
+  localStorage.removeItem("lf_gh_sha"); // clear sha so we re-fetch
+  document.getElementById("cloud-modal").remove();
+  updateCloudBtn();
+  // Pull existing db.json
+  const remote=await ghPull();
+  if(remote){
+    // Merge: remote is authoritative
+    state.xp=typeof remote.xp==="number"?remote.xp:state.xp;
+    state.lessons=Array.isArray(remote.lessons)?remote.lessons.filter(l=>l&&l.id&&l.title):state.lessons;
+    state.planData=remote.planData||state.planData;
+    save();
+    showSyncToast(state.lessons.length+" lessons loaded from GitHub");
+    try{updateXPBar();renderTopicNav();if(state.view==="home")renderHome();}catch(e){}
+  }else{
+    // First time — push current state
+    await ghPush();
   }
-  saveNotionKey(val);
-  document.getElementById("notion-key-modal").remove();
-  updateNotionBtn();
-  if(val)showSyncToast("Notion connected! Future lessons will sync automatically.");
 }
-function updateNotionBtn(){
-  const btn=document.getElementById("notion-sync-btn");
-  if(!btn)return;
-  btn.title=getNotionKey()?"Notion connected — click to manage":"Connect Notion sync";
-  btn.style.color=getNotionKey()?"#43D9AD":"var(--text3)";
-  btn.style.borderColor=getNotionKey()?"rgba(67,217,173,.3)":"var(--border)";
+
+function updateCloudBtn(){
+  const btn=document.getElementById("cloud-sync-btn");if(!btn)return;
+  btn.style.color=getGHToken()?"#43D9AD":"var(--text3)";
+  btn.title=getGHToken()?"GitHub sync active ("+getGHRepo()+") — click to manage":"Set up GitHub sync";
 }
+// Legacy stubs
+function getNotionKey(){return"";}
+function saveNotionKey(){}
+function updateNotionBtn(){updateCloudBtn();}
+function showNotionKeyModal(){showCloudModal();}
 
 // ══════════════════════════════════════════
 //  XP & BELTS
+
 // ══════════════════════════════════════════
 function addXP(n){state.xp+=n;updateXPBar();save();}
 function getBelt(){
@@ -789,7 +729,7 @@ Respond with ONLY this JSON (fill every field with real content):
     addXP(50);
     save();
     // Push to Notion async — don't block UI
-    notionPushLesson(lesson).then(()=>{if(getNotionKey())showSyncToast("Lesson synced to Notion");}).catch(()=>{});
+    ghPush();
     state.currentLesson=lesson;
     state.audioState={playing:false,pos:0,speed:1,segIdx:0};
     TTS.speaking=false;TTS.segIdx=0;clearInterval(TTS.watchdog);window.speechSynthesis.cancel();
@@ -1296,7 +1236,7 @@ Schema (fill ALL 6 belts — White/Yellow/Green/Blue/Brown/Black):
     (parsed.belts||[]).forEach(b=>{b.color=BELT_COLORS[b.belt]||"#888";});
     state.planData=parsed;
     addXP(30);save();
-    notionPushPlan(parsed).then(()=>{if(getNotionKey())showSyncToast("Plan synced to Notion");}).catch(()=>{});
+    ghPush();
     renderPlanView();
   }catch(e){
     clearInterval(planTick);
@@ -1687,28 +1627,9 @@ function requireKey(cb){
 //  DELETE & NOTION ARCHIVE
 // ══════════════════════════════════════════
 
-// Find a Notion page in a DB by a text property value, return its page id
-async function notionFindPage(dbId, propName, propValue){
-  try{
-    const res=await fetch(`${NOTION.API}/databases/${dbId}/query`,{
-      method:"POST",headers:notionHeaders(),
-      body:JSON.stringify({filter:{property:propName,rich_text:{equals:propValue}},page_size:1}),
-    });
-    const data=await res.json();
-    return data.results?.[0]?.id||null;
-  }catch(e){return null;}
-}
 
-// Archive (soft-delete) a Notion page by id
-async function notionArchivePage(pageId){
-  if(!pageId)return;
-  try{
-    await fetch(`${NOTION.API}/pages/${pageId}`,{
-      method:"PATCH",headers:notionHeaders(),
-      body:JSON.stringify({archived:true}),
-    });
-  }catch(e){console.warn("Notion archive failed:",e);}
-}
+
+
 
 async function deleteLesson(id){
   if(!confirm("Delete this lesson? It will also be removed from Notion."))return;
@@ -1720,16 +1641,7 @@ async function deleteLesson(id){
   if(row){row.style.opacity="0";row.style.transition="opacity .2s";setTimeout(()=>row.remove(),200);}
   // Update stat count
   const statEl=document.querySelector(".stat-num");if(statEl)statEl.textContent=state.lessons.length;
-  // Archive in Notion async
-  if(getNotionKey()){
-    const pageId=await notionFindPage(NOTION.LESSONS_DB,"LessonID",id);
-    if(pageId){
-      await notionArchivePage(pageId);
-      showSyncToast("Lesson deleted from Notion");
-    }else{
-      showSyncToast("Removed locally (not found in Notion)",false);
-    }
-  }
+  ghPush(); // sync deletion to cloud
 }
 
 async function deletePlan(){
@@ -1737,22 +1649,7 @@ async function deletePlan(){
   const planTitle=state.planData?.title||"";
   state.planData=null;
   save();
-  // Archive in Notion async
-  if(getNotionKey()&&planTitle){
-    // Plans are stored with title as the main identifier
-    try{
-      const res=await fetch(`${NOTION.API}/databases/${NOTION.PLANS_DB}/query`,{
-        method:"POST",headers:notionHeaders(),
-        body:JSON.stringify({filter:{property:"title",title:{equals:planTitle}},page_size:1}),
-      });
-      const data=await res.json();
-      const pageId=data.results?.[0]?.id||null;
-      if(pageId){
-        await notionArchivePage(pageId);
-        showSyncToast("Plan deleted from Notion");
-      }
-    }catch(e){}
-  }
+  ghPush(); // sync deletion to cloud
   renderPlan();
 }
 
@@ -1772,15 +1669,17 @@ async function init(){
     </div>`;
   }
   if(window.speechSynthesis)try{initVoices();}catch(e){}
-  setTimeout(updateNotionBtn,100);
+  setTimeout(updateCloudBtn,100);
 
   // 2. If Notion key exists, load from Notion in background and refresh UI
-  if(getNotionKey()){
-    const loaded=await notionLoadLessons();
-    if(loaded){
-      try{updateXPBar();}catch(e){}
-      try{renderTopicNav();}catch(e){}
-      if(state.view==="home")try{renderHome();}catch(e){}
+  if(getGHToken()){
+    const loaded=await ghPull();
+    if(remote){
+      state.xp=typeof remote.xp==="number"?remote.xp:state.xp;
+      state.lessons=Array.isArray(remote.lessons)?remote.lessons.filter(l=>l&&l.id&&l.title):state.lessons;
+      state.planData=remote.planData||state.planData;
+      save();
+      try{updateXPBar();renderTopicNav();if(state.view==="home")renderHome();}catch(e){}
     }
   }
 }
