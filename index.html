@@ -740,10 +740,14 @@ Respond with ONLY this JSON (fill every field with real content):
 {"title":"compelling title","tagline":"one hook sentence","topic":"${topicLabel}","level":"${level}","duration":"${dur}","format":"${format}","keywords":["k1","k2","k3","k4","k5"],"showNotes":"2 paragraphs","segments":[{"type":"intro","label":"Cold Open","speaker":"Host","duration":"~1 min","script":"150+ words. Provocative opening with real data or event."},{"type":"main","label":"Core Concept","speaker":"Host","duration":"~3 min","script":"250+ words. Explain HOW it works. Real numbers and systems."},{"type":"example","label":"Real-World Example","speaker":"Host","duration":"~2 min","script":"200+ words. Name real company, event, date, outcome."},{"type":"deep","label":"Deep Dive","speaker":"${deepSpeaker}","duration":"~3 min","script":"250+ words. What practitioners know that textbooks miss."},{"type":"summary","label":"Key Takeaways","speaker":"Host","duration":"~1 min","script":"100+ words. Synthesize the implications."},{"type":"cta","label":"Next Steps","speaker":"Host","duration":"~30 sec","script":"60+ words. Name specific resources."}]${quizInstr}}`;
 
   try{
+    dbg("1. Calling "+getProvider()+" API...");
     const data=await callLLM(systemPrompt, userPrompt, 4000);
+    dbg("2. Got response, extracting text...");
     clearInterval(iv);
     const raw=extractText(data);
+    dbg("3. Parsing JSON ("+raw.length+" chars)...");
     const parsed=safeParseJSON(raw);
+    dbg("4. Done! Building lesson...");
     const lesson={
       topicId:topicId==="custom"?"custom":topicId,
       ...parsed,
@@ -767,8 +771,25 @@ Respond with ONLY this JSON (fill every field with real content):
     renderLesson();
   }catch(e){
     clearInterval(iv);
-    prog.innerHTML=`<div class="card" style="border-color:rgba(255,101,132,.3);background:rgba(255,101,132,.05)"><div style="color:var(--accent2);font-size:13px">Generation failed: ${e.message}</div><button class="btn btn-ghost" style="margin-top:12px" onclick="renderGenerate()">Try again</button></div>`;
+    dbg("ERROR: "+e.message);
+    prog.innerHTML=`<div class="card" style="border-color:rgba(255,101,132,.3);background:rgba(255,101,132,.05)">
+      <div style="color:var(--accent2);font-size:13px;margin-bottom:8px">⚠ ${e.message}</div>
+      <button class="btn btn-ghost" style="margin-top:12px" onclick="renderGenerate()">Try again</button>
+    </div>`;
   }
+}
+
+function dbg(msg){
+  console.log("[LearnFast]",msg);
+  const el=document.getElementById("gen-elapsed");
+  if(el){el.textContent=msg;el.style.color="#43D9AD";}
+  // Also append to a visible debug log below spinner
+  let log=document.getElementById("dbg-log");
+  if(!log){
+    const prog=document.getElementById("gen-progress");
+    if(prog){log=document.createElement("div");log.id="dbg-log";log.style.cssText="margin-top:12px;font-family:monospace;font-size:11px;color:#666;text-align:left;max-width:400px;word-break:break-all";prog.querySelector(".gen-progress")?.appendChild(log);}
+  }
+  if(log){const line=document.createElement("div");line.style.cssText="padding:2px 0;border-bottom:1px solid #1a1a2e;color:#43D9AD";line.textContent="► "+msg;log.appendChild(line);}
 }
 
 // ══════════════════════════════════════════
@@ -1493,44 +1514,52 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
   const key=getApiKey();
   const cfg=PROVIDERS[p];
   const messages=buildMessages(systemPrompt, userPrompt);
+  dbg("Sending to "+p+" ("+cfg.model+")...");
 
   if(p==="openrouter"){
     const tryOR=async(model)=>{
+      dbg("OpenRouter: trying "+model);
       const res=await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions",{method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+key,"HTTP-Referer":"https://learnfast.app","X-Title":"LearnFast"},
         body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:0.7})},50000);
+      dbg("OpenRouter: got HTTP "+res.status);
       return await res.json();
     };
     for(const model of [cfg.model, cfg.fallback, cfg.fallback2].filter(Boolean)){
       const data=await tryOR(model);
+      dbg("OpenRouter response keys: "+Object.keys(data).join(","));
       if(data.choices&&!data.error){return data;}
       const errMsg=data.error?.message||"";
       if(errMsg.includes("No endpoints found")||errMsg.includes("unavailable")){
-        console.warn(`OpenRouter model ${model} unavailable, trying next...`);
-        continue;
+        dbg("Model unavailable, trying next...");continue;
       }
-      throw new Error(errMsg||"OpenRouter error");
+      throw new Error(errMsg||"OpenRouter error: "+JSON.stringify(data).slice(0,100));
     }
-    throw new Error("All OpenRouter free models unavailable. Switch to Groq (click 🔑).");
+    throw new Error("All OpenRouter models unavailable. Switch to Groq.");
   }
   if(p==="groq"){
     const tryGroq=async(model)=>{
+      dbg("Groq: trying "+model);
       const res=await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions",{method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},
         body:JSON.stringify({model,messages,max_tokens:Math.min(maxTokens,8000),temperature:0.6})},45000);
+      dbg("Groq: got HTTP "+res.status);
       return await res.json();
     };
     let data=await tryGroq(cfg.model);
+    dbg("Groq response keys: "+Object.keys(data).join(","));
     if(data.error&&cfg.fallback){
-      console.warn("Groq primary model issue, trying fallback:",cfg.fallback);
+      dbg("Groq error: "+data.error.message+", trying fallback");
       data=await tryGroq(cfg.fallback);
     }
     return data;
   }
   // anthropic
+  dbg("Anthropic: sending request...");
   const res=await fetchWithTimeout("https://api.anthropic.com/v1/messages",{method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
     body:JSON.stringify({model:cfg.model,max_tokens:maxTokens,system:systemPrompt,messages:[{role:"user",content:userPrompt}]})},60000);
+  dbg("Anthropic: got HTTP "+res.status);
   return await res.json();
 }
 
