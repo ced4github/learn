@@ -1468,30 +1468,20 @@ function toggleBelt(i){
 //  MULTI-PROVIDER LLM ENGINE
 // ══════════════════════════════════════════
 const PROVIDERS={
-  openrouter:{
-    name:"OpenRouter",
-    badge:"FREE*",
-    placeholder:"sk-or-...",
-    hint:'Get free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#6C63FF">openrouter.ai/keys</a> — note: Groq is more reliable.',
-    model:"qwen/qwen3-8b:free",
-    fallback:"microsoft/phi-4-reasoning:free",
-    fallback2:"meta-llama/llama-3.3-70b-instruct:free",
-    validate:k=>k.startsWith("sk-or-")||k.length>20,
-  },
   groq:{
     name:"Groq ★",
     badge:"FREE",
     placeholder:"gsk_...",
-    hint:'Get free key at <a href="https://console.groq.com/keys" target="_blank" style="color:#6C63FF">console.groq.com</a> — <strong style="color:#43D9AD">Recommended</strong>: fast, reliable, works globally',
+    hint:'Get free key at <a href="https://console.groq.com/keys" target="_blank" style="color:#43D9AD">console.groq.com</a> — <strong style="color:#43D9AD">Recommended: free, fast, reliable</strong>',
     model:"llama-3.3-70b-versatile",
-    fallback:"qwen/qwen3-32b",
+    fallback:"llama-3.1-70b-versatile",
     validate:k=>k.startsWith("gsk_"),
   },
   anthropic:{
     name:"Claude Sonnet",
     badge:"PAID",
     placeholder:"sk-ant-...",
-    hint:'Get key at <a href="https://console.anthropic.com" target="_blank" style="color:#6C63FF">console.anthropic.com</a> — highest quality',
+    hint:'Get key at <a href="https://console.anthropic.com" target="_blank" style="color:#6C63FF">console.anthropic.com</a> — highest quality, paid',
     model:"claude-sonnet-4-20250514",
     validate:k=>k.startsWith("sk-"),
   },
@@ -1501,14 +1491,7 @@ function getProvider(){return localStorage.getItem("lf_provider")||"groq";}
 function getApiKey(){return localStorage.getItem("lf_apikey_"+getProvider())||"";}
 function saveProvider(p){localStorage.setItem("lf_provider",p);}
 function saveApiKey(p,k){localStorage.setItem("lf_apikey_"+p,k.trim());}
-
-// Build system + user messages for each provider
-function buildMessages(systemPrompt, userPrompt){
-  return [
-    {role:"system", content:systemPrompt},
-    {role:"user",   content:userPrompt},
-  ];
-}
+function buildMessages(systemPrompt,userPrompt){return[{role:"system",content:systemPrompt},{role:"user",content:userPrompt}];}
 
 let _genCtrl=null; // global AbortController for current generation
 
@@ -1543,31 +1526,6 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
   const messages=buildMessages(systemPrompt, userPrompt);
   dbg("Sending to "+p+" ("+cfg.model+")...");
 
-  if(p==="openrouter"){
-    const tryOR=async(model)=>{
-      dbg("OpenRouter: trying "+model);
-      // Inject JSON reminder into last user message for models that ignore system prompt
-      const msgs=[...messages];
-      msgs[msgs.length-1]={...msgs[msgs.length-1],content:msgs[msgs.length-1].content+"\n\nIMPORTANT: Respond with valid JSON only. Start with { and end with }."};
-      const res=await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions",{method:"POST",
-        headers:{"Content-Type":"application/json","Authorization":"Bearer "+key,"HTTP-Referer":"https://learnfast.app","X-Title":"LearnFast"},
-        body:JSON.stringify({model,messages:msgs,max_tokens:maxTokens,temperature:0.7,
-          response_format:{type:"json_object"}})},50000);
-      dbg("OpenRouter: got HTTP "+res.status);
-      return await res.json();
-    };
-    const models=[cfg.model, cfg.fallback, cfg.fallback2].filter(Boolean);
-    const errors=[];
-    for(const model of models){
-      const data=await tryOR(model);
-      dbg("OpenRouter response keys: "+Object.keys(data).join(","));
-      if(data.choices&&!data.error)return data;
-      const errMsg=data.error?.message||data.error?.code||JSON.stringify(data.error||"unknown").slice(0,80);
-      dbg("Model "+model+" failed: "+errMsg);
-      errors.push(model+": "+errMsg);
-    }
-    throw new Error("OpenRouter failed all models. Errors: "+errors.join(" | ")+".\n\nSwitch to Groq (🔑) — it works reliably for free.");
-  }
   if(p==="groq"){
     const tryGroq=async(model)=>{
       dbg("Groq: trying "+model);
@@ -1580,12 +1538,14 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
     let data=await tryGroq(cfg.model);
     dbg("Groq response keys: "+Object.keys(data).join(","));
     if(data.error&&cfg.fallback){
-      dbg("Groq error: "+data.error.message+", trying fallback");
+      dbg("Groq error: "+(data.error.message||JSON.stringify(data.error))+", trying fallback");
       data=await tryGroq(cfg.fallback);
     }
+    if(data.error)throw new Error("Groq: "+(data.error.message||JSON.stringify(data.error)));
     return data;
   }
-  // anthropic
+
+  // Anthropic
   dbg("Anthropic: sending request...");
   const res=await fetchWithTimeout("https://api.anthropic.com/v1/messages",{method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
