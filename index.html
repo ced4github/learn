@@ -745,7 +745,7 @@ Respond with ONLY this JSON (fill every field with real content):
     dbg("2. Got response, extracting text...");
     clearInterval(iv);
     const raw=extractText(data);
-    dbg("3. Parsing JSON ("+raw.length+" chars)...");
+    dbg("3. Raw (first 120): "+raw.slice(0,120));
     const parsed=safeParseJSON(raw);
     dbg("4. Done! Building lesson...");
     const lesson={
@@ -1445,10 +1445,10 @@ const PROVIDERS={
     name:"OpenRouter",
     badge:"FREE*",
     placeholder:"sk-or-...",
-    hint:'Get free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#6C63FF">openrouter.ai/keys</a> — note: free models are unreliable. Groq is more stable.',
-    model:"meta-llama/llama-3.3-70b-instruct:free",
-    fallback:"mistralai/mistral-7b-instruct:free",
-    fallback2:"qwen/qwen3-8b:free",
+    hint:'Get free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#6C63FF">openrouter.ai/keys</a> — note: Groq is more reliable.',
+    model:"qwen/qwen3-8b:free",
+    fallback:"microsoft/phi-4-reasoning:free",
+    fallback2:"meta-llama/llama-3.3-70b-instruct:free",
     validate:k=>k.startsWith("sk-or-")||k.length>20,
   },
   groq:{
@@ -1519,9 +1519,13 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
   if(p==="openrouter"){
     const tryOR=async(model)=>{
       dbg("OpenRouter: trying "+model);
+      // Inject JSON reminder into last user message for models that ignore system prompt
+      const msgs=[...messages];
+      msgs[msgs.length-1]={...msgs[msgs.length-1],content:msgs[msgs.length-1].content+"\n\nIMPORTANT: Respond with valid JSON only. Start with { and end with }."};
       const res=await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions",{method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+key,"HTTP-Referer":"https://learnfast.app","X-Title":"LearnFast"},
-        body:JSON.stringify({model,messages,max_tokens:maxTokens,temperature:0.7})},50000);
+        body:JSON.stringify({model,messages:msgs,max_tokens:maxTokens,temperature:0.7,
+          response_format:{type:"json_object"}})},50000);
       dbg("OpenRouter: got HTTP "+res.status);
       return await res.json();
     };
@@ -1626,7 +1630,7 @@ function safeParseJSON(raw){
   // Strategy 6 — strip ALL control chars from full text and retry
   try{return JSON.parse(text.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g,""));}catch(e6){}
 
-  throw new Error("Could not parse AI response. Please try again — the model returned malformed output.");
+  throw new Error("Could not parse AI response. Model returned: "+text.slice(0,200));
 }
 
 function showKeyModal(onSuccess){
