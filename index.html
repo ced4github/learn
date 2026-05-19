@@ -287,6 +287,9 @@ let state={
   planData:null,
 };
 
+// ══════════════════════════════════════════
+//  PERSISTENCE — localStorage cache + Notion primary
+// ══════════════════════════════════════════
 function save(){
   try{localStorage.setItem("lf_state",JSON.stringify({xp:state.xp,lessons:state.lessons,planData:state.planData}));}catch(e){}
 }
@@ -296,64 +299,95 @@ function load(){
     if(d){
       const p=JSON.parse(d);
       state.xp=typeof p.xp==="number"?p.xp:0;
-      state.lessons=Array.isArray(p.lessons)?p.lessons:[];
+      state.lessons=Array.isArray(p.lessons)?p.lessons.filter(l=>l&&l.id&&l.title):[];
       state.planData=p.planData||null;
-      // Sanitise each lesson — ensure required fields exist
-      state.lessons=state.lessons.filter(l=>l&&typeof l==="object"&&l.id&&l.title);
     }
-  }catch(e){
-    console.warn("Failed to load state, resetting:",e);
-    localStorage.removeItem("lf_state");
-  }
+  }catch(e){localStorage.removeItem("lf_state");}
 }
 
 // ══════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════
-try{load();}catch(e){localStorage.removeItem("lf_state");}
-try{updateXPBar();}catch(e){console.warn("updateXPBar failed:",e);}
-try{renderTopicNav();}catch(e){console.warn("renderTopicNav failed:",e);}
-try{renderHome();}catch(e){
-  console.error("renderHome failed:",e);
-  // Show error in content area so user sees something
-  const el=document.getElementById("content-area");
-  if(el)el.innerHTML=`<div style="padding:32px;color:#FF6584;font-family:monospace;font-size:13px">
-    <div style="font-size:16px;margin-bottom:12px">⚠ Dashboard failed to render</div>
-    <div style="color:#888;margin-bottom:16px">${e.message}</div>
-    <button onclick="localStorage.removeItem('lf_state');location.reload()" style="background:#6C63FF;border:none;color:#fff;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px">Clear data &amp; reload</button>
-  </div>`;
-}
-if(window.speechSynthesis)try{initVoices();}catch(e){}
-setTimeout(updateNotionBtn,100);
+//  NOTION — primary database
 // ══════════════════════════════════════════
 const NOTION={
-  LESSONS_DB:"f501e7c3-3ff8-4228-956e-9076400f8a55",
+  LESSONS_DS:"a703e2be-d453-489e-b037-7633a9862080",  // data source id
+  LESSONS_DB:"f501e7c3-3ff8-4228-956e-9076400f8a55",  // database id
   PLANS_DB:"5ae486ee-0b00-4c4a-8f59-3783a33418a4",
-  HUB_PAGE:"364cfdc2-9af8-8131-b0dc-d2b086df4f23",
   API:"https://api.notion.com/v1",
-  VERSION:"2022-06-28",
+  VER:"2022-06-28",
 };
 function getNotionKey(){return localStorage.getItem("lf_notion_key")||"";}
 function saveNotionKey(k){localStorage.setItem("lf_notion_key",k.trim());}
-
 function notionHeaders(){
-  return{
-    "Content-Type":"application/json",
-    "Authorization":"Bearer "+getNotionKey(),
-    "Notion-Version":NOTION.VERSION,
-    "anthropic-dangerous-direct-browser-access":"true",
-  };
+  return{"Content-Type":"application/json","Authorization":"Bearer "+getNotionKey(),"Notion-Version":NOTION.VER,"anthropic-dangerous-direct-browser-access":"true"};
 }
 
-// Push a single lesson to Notion (creates page + sub-page with full script)
+// Load all lessons from Notion on startup
+async function notionLoadLessons(){
+  if(!getNotionKey())return false;
+  try{
+    showSyncStatus("loading");
+    const res=await fetch(`${NOTION.API}/databases/${NOTION.LESSONS_DB}/query`,{
+      method:"POST",headers:notionHeaders(),
+      body:JSON.stringify({sorts:[{timestamp:"created_time",direction:"descending"}],page_size:50})
+    });
+    const data=await res.json();
+    if(!data.results)return false;
+    const lessons=[];
+    for(const page of data.results){
+      const props=page.properties;
+      const lessonId=props.LessonID?.rich_text?.[0]?.plain_text||"";
+      const title=props.Title?.title?.[0]?.plain_text||"";
+      if(!title)continue;
+      // Fetch the full lesson JSON stored in the page body
+      try{
+        const pageRes=await fetch(`${NOTION.API}/blocks/${page.id}/children`,{headers:notionHeaders()});
+        const blocks=await pageRes.json();
+        const jsonBlock=blocks.results?.find(b=>b.type==="code"||b.paragraph?.rich_text?.[0]?.plain_text?.startsWith("{"));
+        let lessonData={};
+        if(jsonBlock){
+          const raw=jsonBlock.code?.rich_text?.[0]?.plain_text||jsonBlock.paragraph?.rich_text?.[0]?.plain_text||"";
+          try{lessonData=JSON.parse(raw);}catch(e){}
+        }
+        lessons.push({
+          id:lessonId||page.id,
+          notionPageId:page.id,
+          title,
+          level:props.Level?.select?.name||"Intermediate",
+          duration:props.Duration?.rich_text?.[0]?.plain_text||"",
+          format:props.Format?.rich_text?.[0]?.plain_text||"",
+          keywords:(props.Keywords?.rich_text?.[0]?.plain_text||"").split(",").map(k=>k.trim()).filter(Boolean),
+          topicId:topicIdFromLabel(props.Topic?.select?.name||""),
+          completed:false,
+          createdAt:page.created_time,
+          ...lessonData,
+        });
+      }catch(e){
+        lessons.push({id:lessonId||page.id,notionPageId:page.id,title,topicId:"custom",level:"Intermediate",duration:"",segments:[]});
+      }
+    }
+    state.lessons=lessons;
+    state.xp=lessons.length*50;
+    save();
+    showSyncStatus("done",lessons.length+" lessons loaded");
+    return true;
+  }catch(e){
+    showSyncStatus("error","Notion load failed: "+e.message);
+    return false;
+  }
+}
+
+function topicIdFromLabel(label){
+  const map={"AI & ML":"ai","DeFi & Crypto":"defi","DevSecOps":"devsecops","Macro & Markets":"macro","Blockchain Security":"blockchain","Wealth Tech":"wealth"};
+  return map[label]||"custom";
+}
+
+// Push a new lesson to Notion — stores full JSON in a code block
 async function notionPushLesson(lesson){
   if(!getNotionKey())return;
-  const topicMap={ai:"AI & ML",defi:"DeFi & Crypto",devsecops:"DevSecOps",macro:"Macro & Markets",blockchain:"Blockchain Security",wealth:"Wealth Tech"};
-  const topicLabel=topicMap[lesson.topicId]||"Custom";
-  // Create DB entry
+  const topicMap={ai:"AI & ML",defi:"DeFi & Crypto",devsecops:"DevSecOps",macro:"Macro & Markets",blockchain:"Blockchain Security",wealth:"Wealth Tech",custom:"Custom"};
   const props={
     Title:[{text:{content:lesson.title||"Untitled"}}],
-    Topic:{select:{name:topicLabel}},
+    Topic:{select:{name:topicMap[lesson.topicId]||"Custom"}},
     Level:{select:{name:lesson.level||"Intermediate"}},
     Duration:{rich_text:[{text:{content:lesson.duration||""}}]},
     Format:{rich_text:[{text:{content:lesson.format||""}}]},
@@ -361,75 +395,68 @@ async function notionPushLesson(lesson){
     XP:{number:50},
     LessonID:{rich_text:[{text:{content:lesson.id||""}}]},
   };
-  // Build children blocks — full script
+  // Store full lesson JSON as a code block so we can restore it later
+  const jsonStr=JSON.stringify(lesson);
   const children=[
-    {object:"block",type:"callout",callout:{rich_text:[{text:{content:lesson.tagline||""}}],icon:{emoji:"🎙️"},color:"purple_background"}},
-    {object:"block",type:"divider",divider:{}},
+    {object:"block",type:"callout",callout:{rich_text:[{text:{content:lesson.tagline||lesson.title}}],icon:{emoji:"🎙️"},color:"purple_background"}},
+    // Store full data as code block for reliable restore
+    {object:"block",type:"code",code:{rich_text:[{text:{content:jsonStr.slice(0,1800)}}],language:"json"}},
   ];
+  // Add script segments as readable content
   (lesson.segments||[]).forEach(s=>{
-    children.push({object:"block",type:"heading_2",heading_2:{rich_text:[{text:{content:(s.label||"")+" — "+s.speaker+" ("+s.duration+")"}}]}});
-    // Split script into 2000-char chunks (Notion block limit)
+    children.push({object:"block",type:"heading_2",heading_2:{rich_text:[{text:{content:s.label+" ("+s.duration+")"}}]}});
     const txt=s.script||"";
-    for(let i=0;i<txt.length;i+=1800){
+    for(let i=0;i<Math.min(txt.length,3600);i+=1800){
       children.push({object:"block",type:"paragraph",paragraph:{rich_text:[{text:{content:txt.slice(i,i+1800)}}]}});
     }
-    children.push({object:"block",type:"divider",divider:{}});
   });
-  if(lesson.showNotes){
-    children.push({object:"block",type:"heading_3",heading_3:{rich_text:[{text:{content:"Show Notes"}}]}});
-    children.push({object:"block",type:"paragraph",paragraph:{rich_text:[{text:{content:lesson.showNotes}}]}});
-  }
   try{
-    await fetch(`${NOTION.API}/pages`,{method:"POST",headers:notionHeaders(),
-      body:JSON.stringify({parent:{database_id:NOTION.LESSONS_DB},properties:props,children:children.slice(0,100)})});
-  }catch(e){console.warn("Notion lesson push failed:",e);}
+    const res=await fetch(`${NOTION.API}/pages`,{method:"POST",headers:notionHeaders(),
+      body:JSON.stringify({parent:{database_id:NOTION.LESSONS_DB},properties:props,children:children.slice(0,50)})});
+    const data=await res.json();
+    if(data.id)lesson.notionPageId=data.id; // store page id for later deletion
+    save();
+    showSyncToast("Synced to Notion ✓");
+  }catch(e){console.warn("Notion push failed:",e);}
 }
 
-// Push learning plan to Notion
+// Push learning plan
 async function notionPushPlan(plan){
   if(!getNotionKey()||!plan)return;
-  const belt=getBelt();
   const props={
     Title:[{text:{content:plan.title||"My Learning Plan"}}],
-    Topic:{rich_text:[{text:{content:plan.belts?.[0]?.belt||""}}]},
     Goal:{rich_text:[{text:{content:plan.summary||""}}]},
-    CurrentBelt:{rich_text:[{text:{content:belt.name}}]},
+    CurrentBelt:{rich_text:[{text:{content:getBelt().name}}]},
     TotalXP:{number:state.xp},
     UpdatedAt:{rich_text:[{text:{content:new Date().toISOString()}}]},
   };
   const children=[
     {object:"block",type:"callout",callout:{rich_text:[{text:{content:plan.summary||""}}],icon:{emoji:"🎯"},color:"blue_background"}},
-    {object:"block",type:"divider",divider:{}},
+    {object:"block",type:"code",code:{rich_text:[{text:{content:JSON.stringify(plan).slice(0,1800)}}],language:"json"}},
   ];
   (plan.belts||[]).forEach(b=>{
     children.push({object:"block",type:"heading_2",heading_2:{rich_text:[{text:{content:b.belt+" Belt — "+b.duration}}]}});
     children.push({object:"block",type:"paragraph",paragraph:{rich_text:[{text:{content:b.objective||""}}]}});
-    if(b.resources?.length){
-      children.push({object:"block",type:"heading_3",heading_3:{rich_text:[{text:{content:"Resources"}}]}});
-      b.resources.forEach(r=>{
-        children.push({object:"block",type:"bulleted_list_item",bulleted_list_item:{rich_text:[{text:{content:(r.type==="book"?r.title+(r.author?" by "+r.author:""):r.title)+(r.free?" (Free)":"")}}]}});
-      });
-    }
-    if(b.project)children.push({object:"block",type:"quote",quote:{rich_text:[{text:{content:"Project: "+b.project}}]}});
-    children.push({object:"block",type:"divider",divider:{}});
   });
-  if(plan.tips?.length){
-    children.push({object:"block",type:"heading_3",heading_3:{rich_text:[{text:{content:"Pro Tips"}}]}});
-    plan.tips.forEach(t=>children.push({object:"block",type:"bulleted_list_item",bulleted_list_item:{rich_text:[{text:{content:t}}]}}));
-  }
   try{
     await fetch(`${NOTION.API}/pages`,{method:"POST",headers:notionHeaders(),
-      body:JSON.stringify({parent:{database_id:NOTION.PLANS_DB},properties:props,children:children.slice(0,100)})});
+      body:JSON.stringify({parent:{database_id:NOTION.PLANS_DB},properties:props,children:children.slice(0,50)})});
+    showSyncToast("Plan synced to Notion ✓");
   }catch(e){console.warn("Notion plan push failed:",e);}
 }
 
-// Show sync status toast
+function showSyncStatus(state,msg){
+  const btn=document.getElementById("notion-sync-btn");
+  if(!btn)return;
+  if(state==="loading"){btn.textContent="⏳";btn.title="Loading from Notion...";}
+  else if(state==="done"){btn.textContent="🔗";btn.title=msg||"Synced";}
+  else if(state==="error"){btn.textContent="⚠";btn.title=msg||"Sync error";}
+}
 function showSyncToast(msg,ok=true){
   const t=document.createElement("div");
   t.style.cssText=`position:fixed;bottom:20px;right:20px;z-index:9999;background:${ok?"#1a2e1a":"#2e1a1a"};border:1px solid ${ok?"rgba(67,217,173,.3)":"rgba(255,101,132,.3)"};border-radius:8px;padding:10px 16px;font-size:12px;color:${ok?"#43D9AD":"#FF6584"};font-family:'DM Mono',monospace;pointer-events:none;transition:opacity .3s`;
-  t.textContent=(ok?"✓ ":"✗ ")+msg;
-  document.body.appendChild(t);
-  setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},2500);
+  t.textContent=msg;document.body.appendChild(t);
+  setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300);},3000);
 }
 
 function showNotionKeyModal(){
@@ -1768,6 +1795,36 @@ async function deletePlan(){
   }
   renderPlan();
 }
+
+// ══════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════
+async function init(){
+  // 1. Load from localStorage immediately (fast, works offline)
+  try{load();}catch(e){localStorage.removeItem("lf_state");}
+  try{updateXPBar();}catch(e){}
+  try{renderTopicNav();}catch(e){}
+  try{renderHome();}catch(e){
+    const el=document.getElementById("content-area");
+    if(el)el.innerHTML=`<div style="padding:32px;color:#FF6584;font-family:monospace;font-size:13px">
+      <div style="font-size:16px;margin-bottom:12px">⚠ Dashboard error: ${e.message}</div>
+      <button onclick="localStorage.removeItem('lf_state');location.reload()" style="background:#6C63FF;border:none;color:#fff;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:13px">Clear cache &amp; reload</button>
+    </div>`;
+  }
+  if(window.speechSynthesis)try{initVoices();}catch(e){}
+  setTimeout(updateNotionBtn,100);
+
+  // 2. If Notion key exists, load from Notion in background and refresh UI
+  if(getNotionKey()){
+    const loaded=await notionLoadLessons();
+    if(loaded){
+      try{updateXPBar();}catch(e){}
+      try{renderTopicNav();}catch(e){}
+      if(state.view==="home")try{renderHome();}catch(e){}
+    }
+  }
+}
+init();
 </script>
 </body>
 </html>
