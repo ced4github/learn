@@ -1443,19 +1443,19 @@ function toggleBelt(i){
 const PROVIDERS={
   openrouter:{
     name:"OpenRouter",
-    badge:"FREE",
+    badge:"FREE*",
     placeholder:"sk-or-...",
-    hint:'Get free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#6C63FF">openrouter.ai/keys</a> — free credits, DeepSeek V4 Flash (best quality)',
-    model:"deepseek/deepseek-v4-flash:free",
-    fallback:"deepseek/deepseek-r1:free",
-    fallback2:"openrouter/auto",
+    hint:'Get free key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#6C63FF">openrouter.ai/keys</a> — note: free models are unreliable. Groq is more stable.',
+    model:"meta-llama/llama-3.3-70b-instruct:free",
+    fallback:"mistralai/mistral-7b-instruct:free",
+    fallback2:"qwen/qwen3-8b:free",
     validate:k=>k.startsWith("sk-or-")||k.length>20,
   },
   groq:{
-    name:"Groq",
+    name:"Groq ★",
     badge:"FREE",
     placeholder:"gsk_...",
-    hint:'Get free key at <a href="https://console.groq.com/keys" target="_blank" style="color:#6C63FF">console.groq.com</a> — fastest inference, works globally',
+    hint:'Get free key at <a href="https://console.groq.com/keys" target="_blank" style="color:#6C63FF">console.groq.com</a> — <strong style="color:#43D9AD">Recommended</strong>: fast, reliable, works globally',
     model:"llama-3.3-70b-versatile",
     fallback:"qwen/qwen3-32b",
     validate:k=>k.startsWith("gsk_"),
@@ -1525,17 +1525,17 @@ async function callLLM(systemPrompt, userPrompt, maxTokens){
       dbg("OpenRouter: got HTTP "+res.status);
       return await res.json();
     };
-    for(const model of [cfg.model, cfg.fallback, cfg.fallback2].filter(Boolean)){
+    const models=[cfg.model, cfg.fallback, cfg.fallback2].filter(Boolean);
+    const errors=[];
+    for(const model of models){
       const data=await tryOR(model);
       dbg("OpenRouter response keys: "+Object.keys(data).join(","));
-      if(data.choices&&!data.error){return data;}
-      const errMsg=data.error?.message||"";
-      if(errMsg.includes("No endpoints found")||errMsg.includes("unavailable")){
-        dbg("Model unavailable, trying next...");continue;
-      }
-      throw new Error(errMsg||"OpenRouter error: "+JSON.stringify(data).slice(0,100));
+      if(data.choices&&!data.error)return data;
+      const errMsg=data.error?.message||data.error?.code||JSON.stringify(data.error||"unknown").slice(0,80);
+      dbg("Model "+model+" failed: "+errMsg);
+      errors.push(model+": "+errMsg);
     }
-    throw new Error("All OpenRouter models unavailable. Switch to Groq.");
+    throw new Error("OpenRouter failed all models. Errors: "+errors.join(" | ")+".\n\nSwitch to Groq (🔑) — it works reliably for free.");
   }
   if(p==="groq"){
     const tryGroq=async(model)=>{
