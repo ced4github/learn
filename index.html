@@ -713,41 +713,34 @@ async function _doGenerate(){
     if(es)es.textContent=secs+"s · "+providerName+(secs>20?" — thinking hard...":secs>35?" — almost done...":"");
   },2500);
 
-  const TOPIC_PERSONAS={
-    ai:`You are a former Google Brain researcher and AI engineer with 15 years building production ML systems. You've shipped LLMs, RAG pipelines, and agentic systems at scale. You explain AI with precise technical accuracy, real architectural trade-offs, and hard-won practical insight — not surface-level definitions.`,
-    defi:`You are a DeFi protocol architect and on-chain analyst who has audited $500M+ in smart contracts and built liquidity strategies across Ethereum, Solana and L2s. You understand MEV, tokenomics, protocol risk, and yield mechanics at a deep technical and financial level.`,
-    devsecops:`You are a CISO-level security architect with 20 years in adversarial security, threat modelling, and DevSecOps at Tier-1 financial institutions. You've built and broken CI/CD pipelines, conducted red team exercises, and implemented SAST/DAST at enterprise scale.`,
-    macro:`You are a macro strategist who spent 15 years at a global macro hedge fund, trading FX, rates, and equities across economic cycles. You think in terms of monetary transmission mechanisms, cross-asset correlations, and positioning — not just news headlines.`,
-    blockchain:`You are a blockchain security researcher who has found critical vulnerabilities in major protocols, written ZK circuit audits, and built formal verification frameworks. You understand cryptographic primitives, consensus mechanisms, and attack vectors at the protocol level.`,
-    wealth:`You are a Managing Director-level wealth technology advisor at a global private bank, with deep expertise in RWA tokenization, regulatory frameworks (MAS, SEC, FCA), and the architecture of wealth management platforms used by UHNW clients.`,
-    custom:`You are a world-class domain expert, practitioner, and educator in the requested field. You have 20+ years of hands-on experience. You teach like the best professor at MIT combined with a veteran practitioner from the top firm in the industry.`,
+  const hg=format==="Host + Guest";
+  const quizInstr=doQuiz?`,"quiz":[{"q":"Q?","opts":["A","B","C","D"],"answer":0,"explain":"why"},{"q":"Q?","opts":["A","B","C","D"],"answer":1,"explain":"why"},{"q":"Q?","opts":["A","B","C","D"],"answer":2,"explain":"why"},{"q":"Q?","opts":["A","B","C","D"],"answer":0,"explain":"why"},{"q":"Q?","opts":["A","B","C","D"],"answer":3,"explain":"why"}]`:"";
+
+  const PERSONAS={
+    ai:"Expert AI/ML engineer, 15yrs production LLMs, RAG, agents.",
+    defi:"DeFi protocol architect, $500M+ smart contract audits, MEV/tokenomics.",
+    devsecops:"CISO-level DevSecOps architect, 20yrs Tier-1 financial institutions.",
+    macro:"Macro hedge fund strategist, 15yrs FX/rates/equities.",
+    blockchain:"Blockchain security researcher, ZK audits, protocol vulnerabilities.",
+    wealth:"MD-level wealth tech advisor, RWA tokenization, MAS/SEC/FCA.",
+    custom:"World-class domain expert, 20+ years hands-on.",
   };
+  const persona=PERSONAS[topicId]||PERSONAS.custom;
 
-  const persona=TOPIC_PERSONAS[topicId]||TOPIC_PERSONAS.custom;
+  const systemPrompt=`You are: ${persona}
+Write expert podcast scripts using real names, companies, events, numbers — never generic.
+Output ONLY valid JSON starting with { and ending with }. No markdown, no preamble, no explanation.`;
 
-  const systemPrompt=`${persona}
+  const deepSpeaker=hg?"Guest":"Host";
+  const userPrompt=`Create a ${dur} podcast episode.
+Topic: ${topicLabel}${subtopic?" (focus: "+subtopic+")":""}
+Level: ${level} | Format: ${format}
 
-You write educational podcast scripts that sound like the best episode of a professional podcast — Lex Fridman meets Masters in Business meets a world-class university lecture. Your content is:
-- EXPERT-LEVEL: Use precise terminology, real mechanisms, actual numbers and data points where relevant
-- SPECIFIC: Name real companies, protocols, events, people, papers, tools — not generic examples
-- NUANCED: Address trade-offs, failure modes, edge cases, and what most people get wrong
-- ENGAGING: Natural spoken delivery — transitions, rhetorical questions, pauses, analogies that make hard concepts click
-- NEVER GENERIC: Never say "for example, company X does Y" — say which actual company, which actual mechanism
-
-Output ONLY valid JSON. No markdown fences. No backticks. No preamble. No explanation. No text before or after the JSON. Start your response with { and end with }.`;
-
-  const userPrompt=`Generate a ${dur} expert-level educational podcast episode.
-
-Topic: ${topicLabel}${subtopic?" — Specific focus: "+subtopic:""}
-Audience level: ${level}
-Format: ${format}
-${format==="Host + Guest"?"The guest is a practitioner with deep firsthand experience. The host challenges assumptions and asks hard follow-up questions.":""}
-
-Return this exact JSON structure:
-{"title":"Specific compelling title (not generic)","tagline":"One precise hook sentence","topic":"${topicLabel}","level":"${level}","duration":"${dur}","format":"${format}","keywords":["specific-term-1","specific-term-2","specific-term-3","specific-term-4","specific-term-5"],"showNotes":"2 paragraphs: what listeners will learn + 3 specific resources with URLs","segments":[{"type":"intro","label":"Cold Open","speaker":"Host","duration":"~1 min","script":"MINIMUM 250 WORDS. Open with a provocative statement, surprising fact, or counter-intuitive insight that immediately signals expert-level content. No generic introductions. Reference a real recent event, paper, or development."},{"type":"main","label":"Core Mechanism","speaker":"Host","duration":"~3 min","script":"MINIMUM 400 WORDS. Explain the core concept at an expert level. Use the correct technical terminology. Explain HOW it works mechanically, not just WHAT it is. Include real numbers, real systems, real trade-offs."},{"type":"example","label":"Real-World Case Study","speaker":"Host","duration":"~2 min","script":"MINIMUM 300 WORDS. A specific, named real-world case — name the company, protocol, event, date, and outcome. Walk through what actually happened and what it reveals about the underlying mechanisms."},{"type":"deep","label":"Expert Deep Dive","speaker":"${hg?"Guest — a domain practitioner":"Host"}","duration":"~3 min","script":"MINIMUM 400 WORDS. Go deeper than any introductory resource. Address what most people get wrong, the failure modes, the edge cases, the nuances that only practitioners know. Reference specific papers, tools, or frameworks."},{"type":"summary","label":"Synthesis & Implications","speaker":"Host","duration":"~1 min","script":"MINIMUM 200 WORDS. Do NOT just list what was covered. Synthesize: what does this mean for the listener's domain? What should they change about how they think or act? What is the one mental model to take away?"},{"type":"cta","label":"Next Steps","speaker":"Host","duration":"~30 sec","script":"MINIMUM 100 WORDS. Specific, actionable next steps — name the exact resource, paper, tool, or practice. Not generic advice."}]${quizInstr}}`;
+Respond with ONLY this JSON (fill every field with real content):
+{"title":"compelling title","tagline":"one hook sentence","topic":"${topicLabel}","level":"${level}","duration":"${dur}","format":"${format}","keywords":["k1","k2","k3","k4","k5"],"showNotes":"2 paragraphs","segments":[{"type":"intro","label":"Cold Open","speaker":"Host","duration":"~1 min","script":"150+ words. Provocative opening with real data or event."},{"type":"main","label":"Core Concept","speaker":"Host","duration":"~3 min","script":"250+ words. Explain HOW it works. Real numbers and systems."},{"type":"example","label":"Real-World Example","speaker":"Host","duration":"~2 min","script":"200+ words. Name real company, event, date, outcome."},{"type":"deep","label":"Deep Dive","speaker":"${deepSpeaker}","duration":"~3 min","script":"250+ words. What practitioners know that textbooks miss."},{"type":"summary","label":"Key Takeaways","speaker":"Host","duration":"~1 min","script":"100+ words. Synthesize the implications."},{"type":"cta","label":"Next Steps","speaker":"Host","duration":"~30 sec","script":"60+ words. Name specific resources."}]${quizInstr}}`;
 
   try{
-    const data=await callLLM(systemPrompt, userPrompt, 6000);
+    const data=await callLLM(systemPrompt, userPrompt, 4000);
     clearInterval(iv);
     const raw=extractText(data);
     const parsed=safeParseJSON(raw);
@@ -1244,10 +1237,10 @@ Schema (fill ALL 6 belts — White/Yellow/Green/Blue/Brown/Black):
   "tips": ["tip 1", "tip 2", "tip 3"]
 }`;
 
-  const planSystem=`You are a world-class learning designer and domain expert. You create structured, opinionated learning plans that take people from zero to expert faster than any university curriculum. Your plans reference real, specific resources — named books, named courses, named tools — not generic suggestions. You are direct, practical, and hold nothing back.`;
+  const planSystem=`Expert learning coach. Create opinionated belt-progression plans with real, named resources. Be concise. Output ONLY valid JSON, start with { end with }.`;
 
   try{
-    const data=await callLLM(planSystem, prompt, 6000);
+    const data=await callLLM(planSystem, prompt, 3500);
     clearInterval(planTick);
     if(data.error){throw new Error(data.error.message||"API error");}
     const raw=extractText(data);
@@ -1442,8 +1435,8 @@ const PROVIDERS={
     badge:"FREE",
     placeholder:"gsk_...",
     hint:'Get free key at <a href="https://console.groq.com/keys" target="_blank" style="color:#6C63FF">console.groq.com</a> — fastest inference, works globally',
-    model:"deepseek-r1-distill-llama-70b",
-    fallback:"llama-3.3-70b-versatile",
+    model:"llama-3.3-70b-versatile",
+    fallback:"qwen/qwen3-32b",
     validate:k=>k.startsWith("gsk_"),
   },
   anthropic:{
