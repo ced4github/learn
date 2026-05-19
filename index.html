@@ -329,12 +329,11 @@ async function ghPull(){
   try{
     showSyncStatus("loading");
     const res=await fetch(`${GH_API}/repos/${getGHRepo()}/contents/${GH_FILE}`,{headers:ghHeaders()});
-    if(res.status===404)return null; // file doesn't exist yet — first time
-    if(!res.ok)throw new Error("GitHub "+res.status);
+    if(res.status===404){showSyncStatus("done","No db.json yet — will create on next save");return null;}
+    if(!res.ok){const e=await res.json();throw new Error(e.message||"GitHub "+res.status);}
     const data=await res.json();
-    const decoded=JSON.parse(atob(data.content.replace(/\n/g,"")));
-    // Store sha for next write (required by GitHub API)
     localStorage.setItem("lf_gh_sha",data.sha);
+    const decoded=JSON.parse(atob(data.content.replace(/\n/g,"")));
     showSyncStatus("done");
     return decoded;
   }catch(e){
@@ -348,21 +347,55 @@ async function ghPull(){
 async function ghPush(){
   if(!getGHToken()||!getGHRepo())return;
   try{
-    const payload={lessons:state.lessons,xp:state.xp,planData:state.planData,updatedAt:new Date().toISOString()};
+    // Strip segments from index to keep db.json small — store full lesson in localStorage only
+    // We keep full lessons in localStorage; db.json is the cross-device sync file
+    const payload={
+      lessons:state.lessons,  // full lessons including segments
+      xp:state.xp,
+      planData:state.planData,
+      updatedAt:new Date().toISOString()
+    };
+    const json=JSON.stringify(payload);
+    // Check size — GitHub API limit is ~1MB for content
+    if(json.length>700000){
+      // Too large: strip segments from older lessons, keep last 5 full
+      const slim={...payload,lessons:state.lessons.map((l,i)=>
+        i<5?l:{id:l.id,title:l.title,topicId:l.topicId,level:l.level,duration:l.duration,
+             format:l.format,keywords:l.keywords,createdAt:l.createdAt,completed:l.completed,
+             planBeltIdx:l.planBeltIdx,_noSegments:true}
+      )};
+      payload.lessons=slim.lessons;
+    }
     const content=btoa(unescape(encodeURIComponent(JSON.stringify(payload,null,2))));
-    const sha=localStorage.getItem("lf_gh_sha")||"";
-    const body={message:"LearnFast: update db.json",content};
-    if(sha)body.sha=sha; // required for updates, omit for first create
+    // Always get fresh SHA before writing to avoid 409 conflicts
+    let sha=localStorage.getItem("lf_gh_sha")||"";
+    if(!sha){
+      const check=await fetch(`${GH_API}/repos/${getGHRepo()}/contents/${GH_FILE}`,{headers:ghHeaders()});
+      if(check.ok){const d=await check.json();sha=d.sha;localStorage.setItem("lf_gh_sha",sha);}
+    }
+    const body={message:"LearnFast sync",content};
+    if(sha)body.sha=sha;
     const res=await fetch(`${GH_API}/repos/${getGHRepo()}/contents/${GH_FILE}`,{
       method:"PUT",headers:ghHeaders(),body:JSON.stringify(body)});
-    if(!res.ok){
-      const err=await res.json();
-      throw new Error(err.message||"GitHub "+res.status);
+    if(res.status===409){
+      // SHA conflict — fetch latest SHA and retry once
+      const check=await fetch(`${GH_API}/repos/${getGHRepo()}/contents/${GH_FILE}`,{headers:ghHeaders()});
+      if(check.ok){
+        const d=await check.json();
+        localStorage.setItem("lf_gh_sha",d.sha);
+        body.sha=d.sha;
+        const retry=await fetch(`${GH_API}/repos/${getGHRepo()}/contents/${GH_FILE}`,{
+          method:"PUT",headers:ghHeaders(),body:JSON.stringify(body)});
+        if(!retry.ok){const e=await retry.json();throw new Error(e.message||"GitHub "+retry.status);}
+        const rd=await retry.json();
+        localStorage.setItem("lf_gh_sha",rd.content?.sha||d.sha);
+        showSyncToast("Saved to GitHub ✓");return;
+      }
     }
+    if(!res.ok){const e=await res.json();throw new Error(e.message||"GitHub "+res.status);}
     const data=await res.json();
-    // Update sha for next write
     localStorage.setItem("lf_gh_sha",data.content?.sha||sha);
-    showSyncToast("Saved to GitHub db.json");
+    showSyncToast("Saved to GitHub ✓");
   }catch(e){
     showSyncToast("GitHub save failed: "+e.message,false);
     console.warn("GitHub push failed:",e);
@@ -482,8 +515,19 @@ function goHome(){state.view="home";setNav("nav-home");renderTopbar("Dashboard",
 function goGenerate(){state.view="generate";setNav("nav-generate");renderTopbar("Generate Lesson","");renderGenerate();}
 function goPlan(){state.view="plan";setNav("nav-plan");renderTopbar("Learning Plan","");renderPlan();}
 function goLesson(id){
-  const l=state.lessons.find(x=>x.id===id);
+  let l=state.lessons.find(x=>x.id===id);
   if(!l)return;
+  // Segments may be stripped if db.json was too large — restore from localStorage cache
+  if(!l.segments||l.segments.length===0||l._noSegments){
+    try{
+      const cached=JSON.parse(localStorage.getItem("lf_state")||"{}");
+      const full=(cached.lessons||[]).find(x=>x.id===id);
+      if(full&&full.segments&&full.segments.length>0){
+        Object.assign(l,full);delete l._noSegments;
+        save(); // persist restored data
+      }
+    }catch(e){}
+  }
   state.currentLesson=l;state.view="lesson";
   state.audioState={playing:false,pos:0,speed:1,segIdx:0};
   const backBtn=l.planBeltIdx!=null
@@ -764,9 +808,25 @@ function dbg(msg){
 // ══════════════════════════════════════════
 function renderLesson(){
   const l=state.currentLesson;
+  if(!l){goHome();return;}
   const td=TOPICS_DEF.find(t=>t.id===l.topicId)||{icon:"📚",color:"#6C63FF",name:"Lesson"};
   state.view="lesson";
   const el=document.getElementById("content-area");
+  // Guard: segments missing — show notice instead of blank player
+  if(!l.segments||l.segments.length===0){
+    el.innerHTML=`<div style="padding:32px;text-align:center">
+      <div style="font-size:32px;margin-bottom:12px">${td.icon}</div>
+      <div style="font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:8px">${l.title}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.6">
+        This lesson's full content wasn't saved to GitHub yet.<br>
+        It's only available on the device where it was generated.<br>
+        <strong style="color:var(--warn)">Generate it again on this device</strong> to get the full script and player.
+      </div>
+      <button class="btn btn-primary" onclick="goGenerate()">✦ Generate new lesson</button>
+      <button class="btn btn-ghost" style="margin-left:8px" onclick="goHome()">← Back</button>
+    </div>`;
+    return;
+  }
   el.innerHTML=`
   <div class="fade-in">
     <div class="lesson-header">
